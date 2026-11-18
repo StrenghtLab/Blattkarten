@@ -114,3 +114,48 @@ struct PaperCardFace: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+struct CompactLearningCard: View {
+    let card: Card
+    var body: some View {
+        let artwork = CardArtwork(card)
+        let accent: Color = switch artwork {
+        case .neuron, .synapse: Color(red: 0.38, green: 0.24, blue: 0.62)
+        case .brain: Color(red: 0.59, green: 0.26, blue: 0.47)
+        case .impulse: Color(red: 0.58, green: 0.29, blue: 0.14)
+        default: Color(red: 0.12, green: 0.38, blue: 0.30)
+        }
+        VStack(alignment: .leading, spacing: 7) {
+            Text(card.question).font(.system(size: 14, weight: .bold)).lineLimit(2)
+            HStack(alignment: .top, spacing: 6) {
+                Text(card.answer).font(.system(size: 12)).lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if artwork != .concept {
+                    CardIllustration(artwork: artwork)
+                        .frame(width: 48, height: 35)
+                        .foregroundStyle(accent)
+                        .accessibilityHidden(true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+        .foregroundStyle(ink)
+        .background(Color(red: 0.98, green: 0.96, blue: 0.99), in: RoundedRectangle(cornerRadius: 10))
+        .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(accent.opacity(0.45)) }
+    }
+}
+
+enum NeurobiologyExamples {
+    static var cards: [Card] {
+        [
+            Card(question: "Was ist ein Neuron?", answer: "Ein Neuron ist eine Nervenzelle. Sie empfängt und leitet Signale weiter."),
+            Card(question: "Was passiert an einer chemischen Synapse?", answer: "Ein Botenstoff überträgt das Signal auf die nächste Zelle."),
+            Card(question: "Was ist ein Aktionspotenzial?", answer: "Eine kurze Änderung der elektrischen Spannung an der Zellmembran."),
+            Card(question: "Wozu dient die Myelinscheide?", answer: "Sie isoliert das Axon und beschleunigt die Weiterleitung von Signalen."),
+            Card(question: "Was gehört zum zentralen Nervensystem (ZNS)?", answer: "Gehirn und Rückenmark."),
+            Card(question: "Was gehört zum peripheren Nervensystem (PNS)?", answer: "Die Nerven und Nervenknoten außerhalb von Gehirn und Rückenmark.")
+        ]
+    }
+}

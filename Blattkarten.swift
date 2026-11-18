@@ -655,6 +655,8 @@ struct ContentView: View {
     @FocusState private var typingPracticeAnswer: Bool
     @State private var busy = false
     @State private var camera = false
+    @AppStorage("worksheet.compactOverview.v1") private var compactOverview = false
+    @State private var overviewCard: Card?
     @State private var editing: Card?
     @State private var error: String?
     @State private var appeared = false
@@ -788,6 +790,19 @@ struct ContentView: View {
                     return try Worksheet.recognize(image)
                 }
             }
+        }
+        .sheet(item: $overviewCard) { card in
+            VStack(alignment: .trailing, spacing: 14) {
+                ScrollView {
+                    HStack(alignment: .top, spacing: 12) {
+                        PaperCardFace(text: card.question, artwork: nil)
+                        PaperCardFace(text: card.answer, artwork: CardArtwork(card), explanation: card.learningNote)
+                    }
+                }
+                Button("Fertig") { overviewCard = nil }.keyboardShortcut(.defaultAction)
+            }
+            .padding(22)
+            .frame(width: 650, height: 410)
         }
         .sheet(item: $editing) { card in
             let existing = cards.contains { $0.id == card.id }
@@ -1046,9 +1061,33 @@ struct ContentView: View {
                     }
                     .padding(10).background(panel, in: RoundedRectangle(cornerRadius: 9))
                 }
+                HStack {
+                    if !displayedCards.isEmpty {
+                        Picker("Ansicht", selection: $compactOverview) {
+                            Text("Vorder- und Rückseite").tag(false)
+                            Text("Übersicht").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        .accessibilityLabel("Kartenansicht")
+                    }
+                    Spacer()
+                    if selectedSubject == "Biologie", !visibleCards.contains(where: { $0.worksheet == "Neurobiologie · Beispiele" }) {
+                        Button("Neurobiologie-Beispiele hinzufügen") { addNeurobiologyExamples() }
+                            .buttonStyle(Pill())
+                    }
+                }
                 if displayedCards.isEmpty {
                     Text(searchActive ? "Keine passenden Karten gefunden." : "Hier erscheinen deine Karten nach dem ersten Import.")
                         .foregroundStyle(soft).padding(.vertical, 12)
+                } else if compactOverview {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 172), spacing: 12)], spacing: 12) {
+                        ForEach(displayedCards) { card in
+                            Button { overviewCard = card } label: { CompactLearningCard(card: card) }
+                                .buttonStyle(.plain)
+                        }
+                    }
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 470), spacing: 20)], spacing: 20) {
                         ForEach(Array(displayedCards.enumerated()), id: \.element.id) { index, card in
@@ -1066,6 +1105,20 @@ struct ContentView: View {
                 }
             }.padding(32).padding(.bottom, 42)
         }
+    }
+
+    private func addNeurobiologyExamples() {
+        var known = Set(visibleCards.map(\.contentKey))
+        let fresh = NeurobiologyExamples.cards.filter { known.insert($0.contentKey).inserted }
+        cards = fresh.map { draft in
+            var card = draft
+            card.subject = selectedSubject
+            card.folderID = currentFolder?.id
+            card.worksheet = "Neurobiologie · Beispiele"
+            return card
+        } + cards
+        compactOverview = true
+        persist()
     }
 
     var importPanel: some View {
@@ -1532,7 +1585,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.13"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.14"
         checking = true
         Task { @MainActor in
             defer { checking = false }

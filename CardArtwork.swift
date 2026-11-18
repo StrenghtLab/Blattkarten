@@ -1,11 +1,16 @@
 import SwiftUI
 
 enum CardArtwork {
+    case neuron, synapse, brain, impulse
     case series, parallel, ammeter, voltmeter, comparison, water, formula, currentFormula, resistanceFormula, currentUnit, voltageUnit, resistanceUnit, conversion, currentConversion, resistanceConversion, unit, concept
 
     init(_ card: Card) {
         let text = card.question.lowercased()
-        if text.contains("wassermodell") || text.contains("wasserrad") { self = .water }
+        if text.contains("synapse") { self = .synapse }
+        else if text.contains("aktionspotenzial") { self = .impulse }
+        else if text.contains("neuron") || text.contains("myelinscheide") { self = .neuron }
+        else if text.contains("nervensystem") || text.contains("gehirn") { self = .brain }
+        else if text.contains("wassermodell") || text.contains("wasserrad") { self = .water }
         else if text.contains("amperemeter") { self = .ammeter }
         else if text.contains("voltmeter") { self = .voltmeter }
         else if text.contains("ohmsch") || text.contains("widerstand steigt") {
@@ -34,7 +39,9 @@ struct CardIllustration: View {
     var reveal = true
 
     var body: some View {
-        if artwork == .comparison {
+        if [.neuron, .synapse, .brain, .impulse].contains(artwork) {
+            neuroSketch
+        } else if artwork == .comparison {
             HStack(spacing: 8) {
                 circuit(.series)
                 circuit(.parallel)
@@ -64,6 +71,43 @@ struct CardIllustration: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var neuroSketch: some View {
+        Canvas { context, size in
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * size.width, y: y * size.height) }
+            func line(_ points: [CGPoint]) {
+                var path = Path()
+                path.addLines(points)
+                context.stroke(path, with: .foreground, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+            func dot(_ x: CGFloat, _ y: CGFloat, _ radius: CGFloat) {
+                let center = p(x, y)
+                context.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)), with: .foreground)
+            }
+            switch artwork {
+            case .neuron:
+                dot(0.35, 0.5, size.height * 0.13)
+                line([p(0.35, 0.5), p(0.18, 0.17), p(0.07, 0.24)])
+                line([p(0.35, 0.5), p(0.16, 0.57), p(0.06, 0.43)])
+                line([p(0.35, 0.5), p(0.16, 0.83), p(0.08, 0.77)])
+                line([p(0.35, 0.5), p(0.78, 0.5), p(0.91, 0.23)])
+                line([p(0.78, 0.5), p(0.91, 0.77)])
+            case .synapse:
+                line([p(0.25, 0.19), p(0.36, 0.35), p(0.64, 0.35), p(0.75, 0.19)])
+                line([p(0.25, 0.81), p(0.36, 0.65), p(0.64, 0.65), p(0.75, 0.81)])
+                for x in [0.4, 0.5, 0.6] { dot(x, 0.5, 2) }
+            case .brain:
+                let rect = CGRect(x: size.width * 0.19, y: size.height * 0.12, width: size.width * 0.62, height: size.height * 0.76)
+                context.stroke(Path(roundedRect: rect, cornerRadius: size.height * 0.23), with: .foreground, lineWidth: 2)
+                line([p(0.5, 0.15), p(0.48, 0.36), p(0.52, 0.62), p(0.5, 0.86)])
+                line([p(0.24, 0.44), p(0.34, 0.36), p(0.4, 0.50)])
+                line([p(0.6, 0.55), p(0.67, 0.40), p(0.76, 0.45)])
+            default:
+                line([p(0.12, 0.70), p(0.32, 0.70), p(0.48, 0.15), p(0.62, 0.81), p(0.76, 0.70), p(0.9, 0.70)])
+            }
+        }
+        .aspectRatio(1.5, contentMode: .fit)
     }
 
     private var units: [(String, String)]? {
