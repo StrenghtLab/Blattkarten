@@ -84,7 +84,7 @@ struct TutorDock: View {
         }
         .sheet(isPresented: $showingSettings) { configuration }
         .sheet(isPresented: $showingExplanations) { explanationLibrary }
-        .onChange(of: setupRequested) {
+        .onChange(of: setupRequested) { _ in
             if setupRequested {
                 showingSettings = true
                 setupRequested = false
@@ -223,7 +223,7 @@ struct TutorDock: View {
         }
         .padding(24)
         .frame(width: 430)
-        .onChange(of: settings.provider) {
+        .onChange(of: settings.provider) { _ in
                 error = nil
             if settings.provider == .local { Task { await loadModels() } }
         }

@@ -46,7 +46,7 @@ struct NativeTutorChat: View {
                     .frame(maxWidth: .infinity)
                     .padding(22)
                 }
-                .onChange(of: messages.count) { reader.scrollTo("latest", anchor: .bottom) }
+                .onChange(of: messages.count) { _ in reader.scrollTo("latest", anchor: .bottom) }
             }
             Divider()
             VStack(alignment: .leading, spacing: 8) {

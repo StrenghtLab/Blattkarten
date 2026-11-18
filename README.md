@@ -6,7 +6,7 @@ In der Sammlung siehst du Vorder- und Rückseite nebeneinander. Beim Üben wird 
 
 ## Installation
 
-Lade das DMG unter [Releases](https://github.com/StrenghtLab/Blattkarten/releases) herunter, öffne es und ziehe Blattkarten in **Programme**. Die App benötigt macOS 14 oder neuer und unterstützt Intel und Apple Silicon. Die veröffentlichte App ist lokal signiert und nicht von Apple notarisiert.
+Lade das DMG unter [Releases](https://github.com/StrenghtLab/Blattkarten/releases) herunter, öffne es und ziehe Blattkarten in **Programme**. Die App benötigt macOS 13 Ventura oder neuer und unterstützt Intel und Apple Silicon. Die WidgetKit-Erweiterung für den Schreibtisch setzt macOS 14 oder neuer voraus. Die veröffentlichte App ist lokal signiert und nicht von Apple notarisiert.
 
 Im App-Menü unter **Blattkarten → Nach Updates suchen …** kannst du prüfen, ob ein neues DMG bereitsteht.
 

@@ -79,13 +79,17 @@ enum Worksheet {
         request.recognitionLanguages = ["de-DE", "en-US"]
         #if arch(x86_64)
         // Keep OCR usable on Intel Macs without a working Metal accelerator.
-        for (stage, devices) in (try request.supportedComputeStageDevices) {
-            if let cpu = devices.first(where: { device in
-                if case .cpu = device { return true }
-                return false
-            }) {
-                request.setComputeDevice(cpu, for: stage)
+        if #available(macOS 14, *) {
+            for (stage, devices) in (try request.supportedComputeStageDevices) {
+                if let cpu = devices.first(where: { device in
+                    if case .cpu = device { return true }
+                    return false
+                }) {
+                    request.setComputeDevice(cpu, for: stage)
+                }
             }
+        } else {
+            request.usesCPUOnly = true
         }
         #endif
         try VNImageRequestHandler(cgImage: image).perform([request])
@@ -717,12 +721,12 @@ struct ContentView: View {
             if !subjects.contains(selectedSubject) { selectedSubject = "Allgemein" }
             appeared = true
         }
-        .onChange(of: flameOnDesktop) { refreshDesktopFlame() }
+        .onChange(of: flameOnDesktop) { _ in refreshDesktopFlame() }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) {
             reviewClock = $0
             desktopFlame.refreshTime($0)
         }
-        .onChange(of: selectedSubject) {
+        .onChange(of: selectedSubject) { _ in
             currentFolderID = nil
             search = ""
             page = "Sammlung"
@@ -1214,7 +1218,7 @@ struct ContentView: View {
                                         Text(typedAnswer).textSelection(.enabled)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     }
-                                    .scrollBounceBehavior(.basedOnSize)
+                                    .bounceWhenContentOverflows()
                                     .frame(maxHeight: 58)
                                 }
                                 .padding(10)
@@ -1448,7 +1452,7 @@ struct FlipCard: View, Animatable {
             PaperCardFace(text: back ? answer : question, artwork: back ? artwork : nil,
                           explanation: back ? explanation : nil, large: true)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .bounceWhenContentOverflows()
         .frame(height: 304)
         .background(PaperCardFace.paperColor(back: back), in: RoundedRectangle(cornerRadius: 14))
         .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -1585,7 +1589,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.14"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.15"
         checking = true
         Task { @MainActor in
             defer { checking = false }
@@ -1601,6 +1605,18 @@ struct EditCard: View {
                 updateMessage = "GitHub konnte nicht nach einem Update abgefragt werden. Versuche es später erneut."
             }
             showingUpdate = true
+        }
+    }
+}
+
+
+private extension View {
+    @ViewBuilder
+    func bounceWhenContentOverflows() -> some View {
+        if #available(macOS 13.3, *) {
+            self.scrollBounceBehavior(.basedOnSize)
+        } else {
+            self
         }
     }
 }
