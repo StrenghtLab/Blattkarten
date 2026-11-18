@@ -25,7 +25,7 @@ struct PaperCardPair: View {
             }
             HStack(alignment: .top, spacing: 10) {
                 PaperCardFace(text: card.question, artwork: nil)
-                PaperCardFace(text: card.answer, artwork: CardArtwork(card))
+                PaperCardFace(text: card.answer, artwork: CardArtwork(card), explanation: card.learningNote)
             }
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -37,6 +37,7 @@ struct PaperCardPair: View {
 struct PaperCardFace: View {
     let text: String
     let artwork: CardArtwork?
+    var explanation: String? = nil
     var large = false
 
     private var back: Bool { artwork != nil }
@@ -60,6 +61,12 @@ struct PaperCardFace: View {
 
             Rectangle().fill(accent.opacity(0.30)).frame(height: 1)
 
+            Text(text)
+                .font(.system(size: large ? (back ? 23 : 28) : (back && text.count > 110 ? 14 : 16),
+                              weight: back && text.count > 110 ? .regular : .semibold))
+                .foregroundStyle(ink)
+                .fixedSize(horizontal: false, vertical: true)
+
             if let artwork, artwork != .concept {
                 CardIllustration(artwork: artwork)
                     .frame(maxWidth: 330)
@@ -70,11 +77,20 @@ struct PaperCardFace: View {
                     .accessibilityHidden(true)
             }
 
-            Text(text)
-                .font(.system(size: large ? (back ? 23 : 28) : (back && text.count > 110 ? 14 : 16),
-                              weight: back && text.count > 110 ? .regular : .semibold))
-                .foregroundStyle(ink)
-                .fixedSize(horizontal: false, vertical: true)
+            if back, let explanation {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Einfach erklärt")
+                        .font(.system(size: large ? 12 : 10, weight: .bold))
+                        .foregroundStyle(accent)
+                    Text(explanation)
+                        .font(.system(size: large ? 15 : 13))
+                        .foregroundStyle(ink.opacity(0.88))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+            }
 
             if !back {
                 Spacer(minLength: 9)

@@ -35,3 +35,5 @@ Vor jeder Übungsrunde wählst du zwischen **Antworten eintippen** und **Karten 
 Bewertete Karten und erfolgreiche Arbeitsblattimporte zählen als Lernaktivität. Neue Streak-Rekorde, je fünf bewertete Karten und jeder erfolgreiche Import schalten weiteren Kleidungsstil frei. In der Kleiderauswahl gibt es 365 Kombinationen. Ist Lernflamme in der macOS-Widget-Galerie verfügbar, kannst du sie dort hinzufügen. Über **Lernflamme → Flamme auf dem Schreibtisch anzeigen** lässt sich alternativ eine Schreibtischkarte aus der laufenden App öffnen.
 
 Neue Lernkarten fragen möglichst genau einen Sachverhalt ab. Bei Physik werden Definitionen, Einheiten und Umstellungen der Formel separat gelernt.
+
+Die Rückseite zeigt zuerst die kurze Antwort. Bei passenden Karten folgt unter **Einfach erklärt** ein Merksatz oder ein Zahlenbeispiel. Im Karteneditor kannst du eigene Erklärungen ergänzen.

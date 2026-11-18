@@ -16,6 +16,7 @@ struct Card: Codable, Identifiable {
     var worksheet: String? = nil
     var folderID: UUID? = nil
     var review: LearningProgress? = nil
+    var explanation: String? = nil
 
     var subjectName: String { subject ?? "Allgemein" }
 }
@@ -156,11 +157,11 @@ enum Worksheet {
                     let answer: String
                     var unit = unitRows[index]
                     if has(#"^Stromstärke\s+[I1l]$"#, in: label), has("Ladung.*Zeit", in: meanings[index]) {
-                        answer = "Elektrische Ladung, die pro Zeit durch eine Stelle fließt."
+                        answer = "Wie viel elektrische Ladung pro Sekunde durch eine Stelle fließt."
                     } else if has(#"^Spannung\s+U$"#, in: label), has("Energieunterschied.*Ladung", in: meanings[index]) {
-                        answer = "Energieunterschied pro Ladung zwischen zwei Stellen."
+                        answer = "Wie stark sich die Energie pro Ladung zwischen zwei Punkten unterscheidet."
                     } else if has(#"^Widerstand\s+R$"#, in: label), has("Stromfluss hemmt", in: meanings[index]) {
-                        answer = "Er gibt an, wie stark ein Bauteil den Stromfluss hemmt."
+                        answer = "Wie stark ein Bauteil den Stromfluss bremst."
                         unit = "Ohm (Ω)"
                     } else {
                         answer = meaning
@@ -797,7 +798,10 @@ struct ContentView: View {
             } : nil) { updated in
                 if let position = cards.firstIndex(where: { $0.id == updated.id }) {
                     var revised = updated
-                    if cards[position].contentKey != updated.contentKey { revised.review = nil }
+                    if cards[position].contentKey != updated.contentKey {
+                        revised.review = nil
+                        if revised.explanation == cards[position].explanation { revised.explanation = nil }
+                    }
                     cards[position] = revised
                 } else { cards.append(updated) }
                 session = []
@@ -1143,7 +1147,7 @@ struct ContentView: View {
                         Button {
                             togglePracticeCard()
                         } label: {
-                            FlipCard(question: card.question, answer: card.answer, artwork: CardArtwork(card), angle: flipped ? 180 : 0, reduceMotion: reduceMotion)
+                            FlipCard(question: card.question, answer: card.answer, artwork: CardArtwork(card), explanation: card.learningNote, angle: flipped ? 180 : 0, reduceMotion: reduceMotion)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(flipped ? card.answer : card.question)
@@ -1319,8 +1323,12 @@ struct ContentView: View {
                     return
                 }
                 if selectedSubject == importSubject && currentFolder?.id == importFolderID { appeared = reduceMotion }
-                cards = fresh.map {
-                    Card(id: $0.id, question: $0.question, answer: $0.answer, subject: importSubject, worksheet: title, folderID: importFolderID)
+                cards = fresh.map { draft in
+                    var card = draft
+                    card.subject = importSubject
+                    card.worksheet = title
+                    card.folderID = importFolderID
+                    return card
                 } + cards
                 persist()
                 rewardStudy(worksheet: true)
@@ -1374,6 +1382,7 @@ struct FlipCard: View, Animatable {
     let question: String
     let answer: String
     let artwork: CardArtwork
+    let explanation: String?
     var angle: Double
     let reduceMotion: Bool
     var animatableData: Double {
@@ -1383,7 +1392,8 @@ struct FlipCard: View, Animatable {
     var body: some View {
         let back = angle >= 90
         ScrollView {
-            PaperCardFace(text: back ? answer : question, artwork: back ? artwork : nil, large: true)
+            PaperCardFace(text: back ? answer : question, artwork: back ? artwork : nil,
+                          explanation: back ? explanation : nil, large: true)
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(height: 304)
@@ -1462,6 +1472,10 @@ struct EditCard: View {
             TextEditor(text: $card.question).frame(height: 70).border(.secondary.opacity(0.3))
             Text("Antwort").font(.headline)
             TextEditor(text: $card.answer).frame(height: 95).border(.secondary.opacity(0.3))
+            TextField("Erklärung oder Beispiel (optional)", text: Binding(
+                get: { card.explanation ?? "" },
+                set: { card.explanation = $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+            )).textFieldStyle(.roundedBorder)
             HStack {
                 if let delete {
                     Button("Karte löschen", role: .destructive) { delete(); dismiss() }
@@ -1518,7 +1532,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.12"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.13"
         checking = true
         Task { @MainActor in
             defer { checking = false }
