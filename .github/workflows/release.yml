@@ -1,0 +1,33 @@
+name: macOS Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Info.plist
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and publish DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Info.plist)
+          if gh release view "v$version" >/dev/null 2>&1; then
+            exit 0
+          fi
+          ./make-dmg.sh
+          gh release create "v$version" "Blattkarten-$version.dmg" \
+            --target "$GITHUB_SHA" --title "Blattkarten $version" --generate-notes

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>de</string>
+	<key>CFBundleDisplayName</key>
+	<string>Blattkarten</string>
+	<key>CFBundleExecutable</key>
+	<string>Blattkarten</string>
+	<key>CFBundleIconFile</key>
+	<string>Blattkarten</string>
+	<key>CFBundleIdentifier</key>
+	<string>de.blattkarten.mac</string>
+	<key>CFBundleName</key>
+	<string>Blattkarten</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.4</string>
+	<key>CFBundleVersion</key>
+	<string>5</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Blattkarten nutzt die Kamera, um Arbeitsblätter zu fotografieren und den Text zu erkennen.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
