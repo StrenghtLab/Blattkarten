@@ -12,6 +12,18 @@ struct Card: Codable, Identifiable {
     var id = UUID()
     var question: String
     var answer: String
+    var subject: String? = nil
+    var worksheet: String? = nil
+    var folderID: UUID? = nil
+
+    var subjectName: String { subject ?? "Allgemein" }
+}
+
+struct WorksheetFolder: Codable, Identifiable {
+    var id = UUID()
+    let subject: String
+    let parentID: UUID?
+    let name: String
 }
 
 enum StudyError: LocalizedError {
@@ -484,7 +496,62 @@ let soft = Color(red: 0.69, green: 0.74, blue: 0.83)
 
 struct ContentView: View {
     @AppStorage("worksheet.deck.v1") private var saved = Data()
-    @AppStorage("worksheet.title.v1") private var deckTitle = ""
+    @AppStorage("worksheet.title.v1") private var legacyTitle = ""
+    @AppStorage("worksheet.selectedSubject.v1") private var selectedSubject = "Allgemein"
+    @AppStorage("worksheet.customSubjects.v1") private var savedSubjects = Data()
+    @State private var newSubject = ""
+    @State private var addingSubject = false
+    @AppStorage("worksheet.folders.v1") private var savedFolders = Data()
+    @State private var currentFolderID: UUID?
+    @State private var addingFolder = false
+    @State private var newFolder = ""
+
+    private var folders: [WorksheetFolder] {
+        (try? JSONDecoder().decode([WorksheetFolder].self, from: savedFolders)) ?? []
+    }
+
+    private var currentFolder: WorksheetFolder? {
+        folders.first { $0.id == currentFolderID && $0.subject == selectedSubject }
+    }
+
+    private var childFolders: [WorksheetFolder] {
+        folders.filter { $0.subject == selectedSubject && $0.parentID == currentFolder?.id }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private var location: String { currentFolder?.name ?? selectedSubject }
+
+    private var trimmedFolder: String { newFolder.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var canAddFolder: Bool {
+        !trimmedFolder.isEmpty && trimmedFolder.count <= 50 &&
+            !childFolders.contains { $0.name.caseInsensitiveCompare(trimmedFolder) == .orderedSame }
+    }
+
+    private static let defaultSubjects = [
+        ("Allgemein", "tray"), ("Mathematik", "function"), ("Deutsch", "text.book.closed"),
+        ("Englisch", "globe"), ("Physik", "bolt"), ("Chemie", "flask"),
+        ("Biologie", "leaf"), ("Geschichte", "building.columns"), ("Erdkunde", "map")
+    ]
+
+    private var subjects: [String] {
+        Self.defaultSubjects.map { $0.0 } + ((try? JSONDecoder().decode([String].self, from: savedSubjects)) ?? [])
+    }
+
+    private var subjectCards: [Card] { cards.filter { $0.subjectName == selectedSubject } }
+
+    private var visibleCards: [Card] {
+        subjectCards.filter { $0.folderID == currentFolder?.id }
+    }
+
+    private var practiceCards: [Card] { currentFolder == nil ? subjectCards : visibleCards }
+
+    private var trimmedSubject: String { newSubject.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var canAddSubject: Bool {
+        !trimmedSubject.isEmpty && trimmedSubject.count <= 32 &&
+            !subjects.contains { $0.caseInsensitiveCompare(trimmedSubject) == .orderedSame }
+    }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var cards: [Card] = []
     @State private var session: [Card] = []
@@ -518,7 +585,25 @@ struct ContentView: View {
         .frame(minWidth: 840, minHeight: 620)
         .onAppear {
             if let decoded = try? JSONDecoder().decode([Card].self, from: saved) { cards = decoded }
+            if !subjects.contains(selectedSubject) { selectedSubject = "Allgemein" }
             appeared = true
+        }
+        .onChange(of: selectedSubject) {
+            currentFolderID = nil
+            page = "Sammlung"
+            session = []
+            flipped = false
+            appeared = true
+        }
+        .alert("Fach hinzufügen", isPresented: $addingSubject) {
+            TextField("Name des Fachs", text: $newSubject)
+            Button("Abbrechen", role: .cancel) {}
+            Button("Hinzufügen") { addSubject() }.disabled(!canAddSubject)
+        }
+        .alert("Ordner hinzufügen", isPresented: $addingFolder) {
+            TextField("Ordnername", text: $newFolder)
+            Button("Abbrechen", role: .cancel) {}
+            Button("Hinzufügen") { addFolder() }.disabled(!canAddFolder)
         }
         .sheet(isPresented: $camera) {
             CameraSheet { data in
@@ -535,15 +620,15 @@ struct ContentView: View {
         }
         .sheet(item: $editing) { card in
             let existing = cards.contains { $0.id == card.id }
-            EditCard(card: card, delete: existing ? {
+            EditCard(card: card, subjects: subjects, folders: folders, delete: existing ? {
                 cards.removeAll { $0.id == card.id }
-                if cards.isEmpty { deckTitle = "" }
                 session = []
                 persist()
             } : nil) { updated in
                 if let position = cards.firstIndex(where: { $0.id == updated.id }) {
                     cards[position] = updated
                 } else { cards.append(updated) }
+                session = []
                 persist()
             }
         }
@@ -570,10 +655,30 @@ struct ContentView: View {
                     .background(mint, in: RoundedRectangle(cornerRadius: 12))
                 Text("Blattkarten").font(.system(size: 18, weight: .bold))
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, 14)
             navigation("Sammlung", "rectangle.stack")
             navigation("Üben", "bolt.fill")
-            Spacer()
+            Divider().padding(.vertical, 3)
+            HStack {
+                Text("Fächer").font(.caption.bold()).foregroundStyle(soft)
+                Spacer()
+                Button {
+                    newSubject = ""
+                    addingSubject = true
+                } label: {
+                    Image(systemName: "plus.circle").font(.system(size: 15)).foregroundStyle(mint)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Fach hinzufügen")
+                .help("Fach hinzufügen")
+            }
+            ScrollView {
+                VStack(spacing: 3) {
+                    ForEach(subjects, id: \.self) { subject in
+                        subjectButton(subject)
+                    }
+                }
+            }
             Label("Lokal auf diesem Mac", systemImage: "lock")
                 .font(.system(size: 11)).foregroundStyle(soft)
         }
@@ -584,9 +689,99 @@ struct ContentView: View {
         .overlay(alignment: .trailing) { Rectangle().fill(.white.opacity(0.08)).frame(width: 1) }
     }
 
+    func subjectButton(_ subject: String) -> some View {
+        let icon = Self.defaultSubjects.first { $0.0 == subject }?.1 ?? "folder"
+        let selected = selectedSubject == subject
+        return Button {
+            selectedSubject = subject
+            showFolder(nil)
+        } label: {
+            Label(subject, systemImage: icon)
+                .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                .lineLimit(1)
+                .foregroundStyle(selected ? mint : soft)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(selected ? mint.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    func addSubject() {
+        guard canAddSubject else { return }
+        let custom = Array(subjects.dropFirst(Self.defaultSubjects.count)) + [trimmedSubject]
+        guard let data = try? JSONEncoder().encode(custom) else { return }
+        savedSubjects = data
+        selectedSubject = trimmedSubject
+    }
+
+    func showFolder(_ id: UUID?) {
+        currentFolderID = id
+        page = "Sammlung"
+        session = []
+        flipped = false
+        appeared = true
+    }
+
+    func addFolder() {
+        guard canAddFolder else { return }
+        let folder = WorksheetFolder(subject: selectedSubject, parentID: currentFolder?.id, name: trimmedFolder)
+        guard let data = try? JSONEncoder().encode(folders + [folder]) else { return }
+        savedFolders = data
+        showFolder(folder.id)
+    }
+
+    var folderHeader: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if let folder = currentFolder {
+                let parentName = folders.first { $0.id == folder.parentID }?.name ?? selectedSubject
+                Button { showFolder(folder.parentID) } label: {
+                    Label(parentName, systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(mint)
+            }
+            HStack(spacing: 12) {
+                Text(location).font(.system(size: 39, weight: .bold)).lineLimit(1)
+                Button {
+                    newFolder = ""
+                    addingFolder = true
+                } label: {
+                    Image(systemName: "plus.circle.fill").font(.system(size: 22)).foregroundStyle(mint)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Ordner hinzufügen")
+                .help(currentFolder == nil ? "Ordner hinzufügen" : "Unterordner hinzufügen")
+            }
+            if currentFolder == nil {
+                Text("Arbeitsblätter und Karteikarten für dieses Fach").foregroundStyle(soft)
+            }
+        }
+    }
+
+    var folderGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
+            ForEach(childFolders) { folder in
+                Button { showFolder(folder.id) } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "folder.fill").foregroundStyle(lilac)
+                        Text(folder.name).lineLimit(1)
+                        Spacer(minLength: 2)
+                        Image(systemName: "chevron.right").foregroundStyle(soft).font(.caption)
+                    }
+                    .padding(12)
+                    .background(panel, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     func navigation(_ title: String, _ icon: String) -> some View {
         Button {
-            if title == "Üben", session.isEmpty, !cards.isEmpty { begin(cards) }
+            if title == "Üben", session.isEmpty, !practiceCards.isEmpty { begin(practiceCards) }
             page = title
         } label: {
             Label(title, systemImage: icon)
@@ -601,43 +796,51 @@ struct ContentView: View {
     var collection: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Deine Sammlung").font(.system(size: 39, weight: .bold))
-                    Text("Aus Arbeitsblättern werden Karten zum Lernen.").foregroundStyle(soft)
-                }
+                folderHeader
+                if !childFolders.isEmpty { folderGrid }
                 importPanel
                 HStack {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(deckTitle.isEmpty ? "Karteikarten" : deckTitle)
+                        Text("Karteikarten")
                             .font(.title2.bold()).lineLimit(1)
-                        Text("\(cards.count) \(cards.count == 1 ? "Karte" : "Karten")")
+                        Text("\(visibleCards.count) \(visibleCards.count == 1 ? "Karte" : "Karten")")
                             .font(.caption).foregroundStyle(soft)
                     }
                     Spacer()
+                    Button { editing = Card(question: "", answer: "", subject: selectedSubject, folderID: currentFolder?.id) } label: {
+                        Label("Karte", systemImage: "plus")
+                    }.buttonStyle(Pill())
                     if !cards.isEmpty {
-                        Button { editing = Card(question: "", answer: "") } label: {
-                            Label("Karte", systemImage: "plus")
-                        }.buttonStyle(Pill())
-                        Button { printError = !CardPrinting.printAll(cards) } label: {
-                            Label("Alle drucken", systemImage: "printer")
+                        Menu {
+                            if currentFolder != nil {
+                                Button("Diesen Ordner drucken") { printError = !CardPrinting.printAll(visibleCards) }
+                                    .disabled(visibleCards.isEmpty)
+                                    .keyboardShortcut("p")
+                            }
+                            Button("Dieses Fach drucken") { printError = !CardPrinting.printAll(subjectCards) }
+                                .disabled(subjectCards.isEmpty)
+                            Button("Alle Fächer drucken") { printError = !CardPrinting.printAll(cards) }
+                        } label: {
+                            Label("Drucken", systemImage: "printer")
                         }
-                        .buttonStyle(Pill())
-                        .keyboardShortcut("p")
-                        Button { begin(cards) } label: {
+                        .fixedSize()
+                    }
+                    if !practiceCards.isEmpty {
+                        Button { begin(practiceCards) } label: {
                             Label("Jetzt üben", systemImage: "bolt.fill")
                         }.buttonStyle(Pill(tint: mint))
                     }
                 }
-                if cards.isEmpty {
+                if visibleCards.isEmpty {
                     Text("Hier erscheinen deine Karten nach dem ersten Import.")
                         .foregroundStyle(soft).padding(.vertical, 12)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 205), spacing: 14)], spacing: 14) {
-                        ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                        ForEach(Array(visibleCards.enumerated()), id: \.element.id) { index, card in
                             Button { editing = card } label: {
                                 VStack(alignment: .leading, spacing: 13) {
                                     HStack {
-                                        Text("LERNKARTE").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(index.isMultiple(of: 2) ? mint : lilac)
+                                        Text(card.worksheet ?? (card.subject == nil && !legacyTitle.isEmpty ? legacyTitle : "Lernkarte")).lineLimit(1).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(index.isMultiple(of: 2) ? mint : lilac)
                                         Spacer()
                                         Image(systemName: "pencil").foregroundStyle(soft)
                                     }
@@ -700,9 +903,9 @@ struct ContentView: View {
 
     var practice: some View {
         VStack(alignment: .leading, spacing: 23) {
-            Text("Üben").font(.system(size: 39, weight: .bold))
+            Text("Üben · \(location)").font(.system(size: 39, weight: .bold))
             if session.isEmpty {
-                Text("Lies zuerst ein Arbeitsblatt ein.").foregroundStyle(soft)
+                Text("Füge diesem Fach zuerst Karten hinzu.").foregroundStyle(soft)
                 Button("Zur Sammlung") { page = "Sammlung" }.buttonStyle(Pill(tint: mint))
             } else if cursor >= session.count {
                 VStack(alignment: .leading, spacing: 17) {
@@ -713,7 +916,7 @@ struct ContentView: View {
                         if !missed.isEmpty {
                             Button("\(missed.count) wiederholen") { begin(missed) }.buttonStyle(Pill(tint: mint))
                         }
-                        Button("Alle neu mischen") { begin(cards) }.buttonStyle(Pill())
+                        Button("Alle neu mischen") { begin(practiceCards) }.buttonStyle(Pill())
                     }
                 }.padding(30).frame(maxWidth: .infinity, minHeight: 260, alignment: .leading)
                     .background(panel, in: RoundedRectangle(cornerRadius: 22))
@@ -776,6 +979,8 @@ struct ContentView: View {
 
     func process(title: String, load: @escaping @Sendable () throws -> String) {
         guard !busy else { return }
+        let importSubject = selectedSubject
+        let importFolderID = currentFolder?.id
         busy = true
         Task { @MainActor in
             defer { busy = false }
@@ -787,9 +992,10 @@ struct ContentView: View {
                     guard !result.isEmpty else { throw StudyError.noFacts }
                     return result
                 }.value
-                if cards.isEmpty { deckTitle = title } else if deckTitle != title { deckTitle = "Arbeitsblätter" }
-                appeared = reduceMotion
-                cards = generated + cards
+                if selectedSubject == importSubject && currentFolder?.id == importFolderID { appeared = reduceMotion }
+                cards = generated.map {
+                    Card(id: $0.id, question: $0.question, answer: $0.answer, subject: importSubject, worksheet: title, folderID: importFolderID)
+                } + cards
                 persist()
                 if !reduceMotion { try? await Task.sleep(for: .milliseconds(90)) }
                 appeared = true
@@ -874,12 +1080,29 @@ struct Pill: ButtonStyle {
 
 struct EditCard: View {
     @State var card: Card
+    let subjects: [String]
+    let folders: [WorksheetFolder]
     @Environment(\.dismiss) private var dismiss
     let delete: (() -> Void)?
     let save: (Card) -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Karte bearbeiten").font(.title2.bold())
+            Picker("Fach", selection: Binding(
+                get: { card.subjectName },
+                set: { newSubject in
+                    if card.subjectName != newSubject { card.folderID = nil }
+                    card.subject = newSubject
+                }
+            )) {
+                ForEach(subjects, id: \.self) { Text($0).tag($0) }
+            }
+            Picker("Ordner", selection: $card.folderID) {
+                Text("Fachebene").tag(nil as UUID?)
+                ForEach(folders.filter { $0.subject == card.subjectName }) { folder in
+                    Text(folderPath(folder)).tag(Optional(folder.id))
+                }
+            }
             Text("Frage").font(.headline)
             TextEditor(text: $card.question).frame(height: 70).border(.secondary.opacity(0.3))
             Text("Antwort").font(.headline)
@@ -895,6 +1118,18 @@ struct EditCard: View {
                               card.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }.padding(24).frame(width: 475)
+    }
+
+    private func folderPath(_ folder: WorksheetFolder) -> String {
+        var names = [folder.name]
+        var seen: Set<UUID> = [folder.id]
+        var parentID = folder.parentID
+        while let id = parentID, seen.insert(id).inserted,
+              let parent = folders.first(where: { $0.id == id }) {
+            names.append(parent.name)
+            parentID = parent.parentID
+        }
+        return names.reversed().joined(separator: " / ")
     }
 }
 
@@ -928,7 +1163,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.5"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.6"
         checking = true
         Task { @MainActor in
             defer { checking = false }
