@@ -24,6 +24,6 @@ Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Un
 
 **Datei mit KI** lässt ein eingerichtetes Modell den erkannten Text für die Kartenerstellung auswerten. Bei OpenAI sendet die App den erkannten Text nur nach einer Bestätigung. **Datei öffnen** verwendet die lokale Kartenerstellung.
 
-### ChatGPT ohne API-Schlüssel
+### Antworten direkt in Blattkarten
 
-Wähle im KI-Lernchat unter **Anbieter** die Option **ChatGPT-App oder Browser**. In der **Vorschau** kannst du Frage und Kartentexte vor der Übergabe bearbeiten. **Kopieren und ChatGPT öffnen** kopiert den geprüften Text. Über **Antwort ablegen** kannst du eine Erklärung in Blattkarten einfügen und für den aktuellen Ordner speichern. Füge den Text mit ⌘V in ChatGPT ein und sende ihn dort. Blattkarten öffnet die Mac-App, wenn sie verfügbar ist, sonst ChatGPT im Browser. Für die automatische Funktion **Datei mit KI** ist weiterhin ein lokales Modell oder die OpenAI API nötig.
+Wähle unter **KI einrichten** die **OpenAI API** oder ein lokales **Ollama**-Modell. Gib deine Frage im Blattkarten-Lernchat ein und klicke auf **Senden**. Frage, Antwort und Rückfragen bleiben in der nativen Chat-Ansicht von Blattkarten. Für das OpenAI-Modell brauchst du einen API-Schlüssel.

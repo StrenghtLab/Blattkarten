@@ -508,6 +508,7 @@ struct ContentView: View {
     @State private var newSubject = ""
     @State private var addingSubject = false
     @State private var tutorOpen = false
+    @State private var nativeTutor: TutorSessionRequest?
     @StateObject private var tutorSettings = TutorSettings()
     @AppStorage("worksheet.folders.v1") private var savedFolders = Data()
     @State private var currentFolderID: UUID?
@@ -613,6 +614,18 @@ struct ContentView: View {
     @State private var printError = false
 
     var body: some View {
+        Group {
+            if let nativeTutor {
+                NativeTutorChat(request: nativeTutor) { self.nativeTutor = nil }
+                    .id(nativeTutor.id)
+            } else {
+                workspace
+            }
+        }
+        .frame(minWidth: 840, minHeight: 620)
+    }
+
+    private var workspace: some View {
         HStack(spacing: 0) {
             sidebar
             VStack(alignment: .leading, spacing: 0) {
@@ -625,7 +638,8 @@ struct ContentView: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 TutorDock(scope: tutorScope, scopeID: currentFolder.map { "folder:" + $0.id.uuidString } ?? "subject:" + selectedSubject,
-                          cards: tutorCards, expanded: $tutorOpen, setupRequested: $showTutorSetup, settings: tutorSettings)
+                          cards: tutorCards, expanded: $tutorOpen, setupRequested: $showTutorSetup,
+                          openNativeChat: { nativeTutor = $0 }, settings: tutorSettings)
                     .id(TutorScopeIdentity(subject: selectedSubject, folderID: currentFolder?.id))
                     .padding(18)
             }
@@ -1048,11 +1062,6 @@ struct ContentView: View {
     func persist() { if let encoded = try? JSONEncoder().encode(cards) { saved = encoded } }
 
     func startAIImport() {
-        if tutorSettings.provider == .chatGPT {
-            tutorOpen = true
-            showTutorSetup = true
-            return
-        }
         if tutorSettings.provider == .openAI {
             guard !tutorSettings.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 tutorOpen = true
@@ -1276,7 +1285,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.1"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.4"
         checking = true
         Task { @MainActor in
             defer { checking = false }

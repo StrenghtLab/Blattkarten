@@ -6,7 +6,6 @@ final class TutorSettings: ObservableObject {
     enum Provider: String, CaseIterable, Identifiable {
         case local = "Lokal mit Ollama"
         case openAI = "OpenAI API"
-        case chatGPT = "ChatGPT-App oder Browser"
         var id: Self { self }
     }
 
@@ -16,7 +15,7 @@ final class TutorSettings: ObservableObject {
 
     init() {
         let saved = UserDefaults.standard.string(forKey: "tutor.provider.v1") ?? ""
-        provider = Provider(rawValue: saved) ?? .local
+        provider = Provider(rawValue: saved) ?? (saved.isEmpty ? .local : .openAI)
     }
     @Published var model = ""
     @Published var key = ""
@@ -36,18 +35,14 @@ struct TutorDock: View {
     let cards: [Card]
     @Binding var expanded: Bool
     @Binding var setupRequested: Bool
+    let openNativeChat: (TutorSessionRequest) -> Void
     @ObservedObject var settings: TutorSettings
     @State private var showingSettings = false
     @State private var models: [String] = []
     @State private var modelStatus = ""
     @State private var checkingModels = false
     @State private var question = ""
-    @State private var conversation: [TutorMessage] = []
-    @State private var inFlight: Task<Void, Never>?
     @State private var error: String?
-    @State private var copied = false
-    @State private var showingHandoff = false
-    @State private var handoffDraft = ""
     @State private var showingExplanations = false
     @State private var explanationDraft = ""
     @AppStorage("tutor.explanations.v1") private var savedExplanations = Data()
@@ -65,19 +60,13 @@ struct TutorDock: View {
         switch settings.provider {
         case .local:
             models.contains(settings.model) ? .local(settings.model) : nil
-        case .chatGPT:
-            nil
         case .openAI:
             settings.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil :
                 .openAI(settings.key.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
 
-    private var handoff: Bool { settings.provider == .chatGPT }
-
-    private var canAsk: Bool {
-        !cards.isEmpty && (handoff || backend != nil)
-    }
+    private var canAsk: Bool { !cards.isEmpty && backend != nil }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 12) {
@@ -94,9 +83,6 @@ struct TutorDock: View {
             .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
         }
         .sheet(isPresented: $showingSettings) { configuration }
-        .sheet(isPresented: $showingHandoff) {
-            TutorHandoffPreview(scope: scope, draft: $handoffDraft, open: openInChatGPT)
-        }
         .sheet(isPresented: $showingExplanations) { explanationLibrary }
         .onChange(of: setupRequested) {
             if setupRequested {
@@ -107,7 +93,6 @@ struct TutorDock: View {
         .task(id: scope) {
             if expanded && settings.provider == .local { await loadModels() }
         }
-        .onDisappear { inFlight?.cancel() }
     }
 
     private var chat: some View {
@@ -138,14 +123,6 @@ struct TutorDock: View {
                 Text("Füge hier zuerst Karteikarten hinzu oder öffne einen Ordner mit Lernstoff.")
                     .foregroundStyle(soft)
                     .padding(.vertical, 12)
-            } else if handoff {
-                Text("ChatGPT öffnet sich mit deiner Frage in der Zwischenablage. Füge sie in einem Chat mit ⌘V ein und sende sie ab.")
-                    .foregroundStyle(soft)
-                    .fixedSize(horizontal: false, vertical: true)
-                if copied {
-                    Label("Frage und passende Karten kopiert.", systemImage: "checkmark.circle")
-                        .font(.caption).foregroundStyle(mint)
-                }
             } else if backend == nil {
                 VStack(alignment: .leading, spacing: 9) {
                     Text("Richte ein KI-Modell ein, um Fragen zu deinen Karten zu stellen.")
@@ -153,7 +130,7 @@ struct TutorDock: View {
                     Button("KI einrichten") { showingSettings = true }
                         .buttonStyle(Pill())
                 }
-            } else if conversation.isEmpty {
+            } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Was verstehst du noch nicht?").foregroundStyle(soft)
                     HStack(spacing: 8) {
@@ -169,11 +146,9 @@ struct TutorDock: View {
                     .buttonStyle(Pill())
                 }
                 .padding(.vertical, 6)
-            } else {
-                transcript
             }
 
-            if handoff || !scopeExplanations.isEmpty {
+            if !scopeExplanations.isEmpty {
                 Button {
                     explanationDraft = ""
                     showingExplanations = true
@@ -188,14 +163,6 @@ struct TutorDock: View {
                 Text(error).font(.caption).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if inFlight != nil {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Die KI formuliert eine Erklärung …").font(.caption).foregroundStyle(soft)
-                    Spacer()
-                    Button("Stopp") { inFlight?.cancel() }.buttonStyle(.plain)
-                }
-            }
             if settings.provider == .openAI && backend != nil && !cards.isEmpty {
                 Text("Beim Senden gehen deine Frage und passende Kartentexte an OpenAI.")
                     .font(.caption2).foregroundStyle(soft)
@@ -206,15 +173,11 @@ struct TutorDock: View {
                     .lineLimit(1...3)
                     .focused($focused)
                     .disabled(!canAsk)
-                Button(action: handoff ? previewHandoff : ask) {
-                    if handoff {
-                        Label("Vorschau", systemImage: "arrow.up.right")
-                    } else {
-                        Image(systemName: "arrow.up").accessibilityLabel("Frage senden")
-                    }
+                Button(action: ask) {
+                    Label("Senden", systemImage: "arrow.up")
                 }
                 .buttonStyle(Pill(tint: mint))
-                .disabled(!canAsk || inFlight != nil ||
+                .disabled(!canAsk ||
                           question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -223,29 +186,6 @@ struct TutorDock: View {
         .background(panel, in: RoundedRectangle(cornerRadius: 16))
         .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(lilac.opacity(0.25)) }
         .shadow(color: .black.opacity(0.48), radius: 18, y: 7)
-    }
-
-    private var transcript: some View {
-        ScrollViewReader { reader in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(conversation) { message in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(message.role == .user ? "Du" : "Lernchat")
-                                .font(.caption.bold()).foregroundStyle(mint)
-                            Text(verbatim: message.content).textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(9)
-                        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
-                    }
-                    Color.clear.frame(height: 1).id("latest")
-                }
-            }
-            .frame(height: 238)
-            .onChange(of: conversation.count, initial: true) { reader.scrollTo("latest", anchor: .bottom) }
-        }
     }
 
     private var configuration: some View {
@@ -268,9 +208,6 @@ struct TutorDock: View {
                         .disabled(checkingModels)
                     Link("Ollama öffnen", destination: URL(string: "https://ollama.com/download/mac")!)
                 }
-            } else if handoff {
-                Text("Verwende dein normales ChatGPT-Konto. Blattkarten kopiert passende Kartentexte und deine Frage. Antworten erscheinen in ChatGPT.")
-                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("OpenAI verarbeitet die Frage und die ausgewählten Kartentexte. Für Anfragen können API-Kosten anfallen.")
                     .fixedSize(horizontal: false, vertical: true)
@@ -287,10 +224,7 @@ struct TutorDock: View {
         .padding(24)
         .frame(width: 430)
         .onChange(of: settings.provider) {
-            inFlight?.cancel()
-            conversation = []
-            copied = false
-            error = nil
+                error = nil
             if settings.provider == .local { Task { await loadModels() } }
         }
     }
@@ -332,7 +266,7 @@ struct TutorDock: View {
                 }
                 .frame(maxHeight: 195)
             }
-            Text("Kopiere die Erklärung in ChatGPT und füge sie hier mit ⌘V ein.")
+            Text("Füge bei Bedarf eine weitere Erklärung mit ⌘V ein.")
                 .foregroundStyle(soft)
             TextEditor(text: $explanationDraft)
                 .frame(minHeight: 105)
@@ -360,90 +294,9 @@ struct TutorDock: View {
         explanationDraft = ""
     }
 
-    private func previewHandoff() {
-        let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard handoff, !text.isEmpty, !cards.isEmpty else { return }
-        handoffDraft = TutorClient.chatGPTPrompt(cards: cards, scope: scope, question: text)
-        showingHandoff = true
-        copied = false
-    }
-
-    private func openInChatGPT(_ draft: String) {
-        let prompt = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        guard pasteboard.setString(prompt, forType: .string) else {
-            error = "Die Frage konnte nicht in die Zwischenablage kopiert werden."
-            return
-        }
-        error = nil
-        copied = true
-        showingHandoff = false
-        let web = URL(string: "https://chatgpt.com/")!
-        let workspace = NSWorkspace.shared
-        let chatGPTApp = workspace.urlForApplication(withBundleIdentifier: "com.openai.codex")
-            ?? workspace.urlForApplication(withBundleIdentifier: "com.openai.chat")
-        if let app = chatGPTApp {
-            workspace.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                if error != nil { DispatchQueue.main.async { NSWorkspace.shared.open(web) } }
-            }
-        } else {
-            workspace.open(web)
-        }
-    }
-
     private func ask() {
         let text = String(question.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1_500))
-        guard let backend, !cards.isEmpty, !text.isEmpty, inFlight == nil else { return }
-        let history = conversation
-        let earlierQuestion = history.last { $0.role == .user }?.content ?? ""
-        let material = TutorClient.material(cards: cards, scope: scope, question: text + " " + earlierQuestion)
-        conversation.append(TutorMessage(role: .user, content: text))
-        question = ""
-        error = nil
-        inFlight = Task { @MainActor in
-            defer { inFlight = nil }
-            do {
-                let answer = try await TutorClient.reply(backend: backend, material: material, history: history, question: text)
-                try Task.checkCancellation()
-                conversation.append(TutorMessage(role: .assistant, content: answer))
-            } catch {
-                if conversation.last?.role == .user { conversation.removeLast() }
-                if question.isEmpty { question = text }
-                if !Task.isCancelled { self.error = error.localizedDescription }
-            }
-        }
-    }
-}
-
-
-private struct TutorHandoffPreview: View {
-    let scope: String
-    @Binding var draft: String
-    let open: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Anfrage für ChatGPT").font(.title2.bold())
-            Label(scope, systemImage: "folder").foregroundStyle(soft)
-            Text("Prüfe den Text und entferne bei Bedarf einzelne Karten. Du sendest die Anfrage anschließend in ChatGPT.")
-                .fixedSize(horizontal: false, vertical: true)
-            TextEditor(text: $draft)
-                .font(.system(size: 13, design: .monospaced))
-                .frame(minHeight: 250)
-                .border(.secondary.opacity(0.3))
-                .accessibilityLabel("Anfrage und Kartentexte")
-            HStack {
-                Spacer()
-                Button("Abbrechen", role: .cancel) { dismiss() }
-                Button("Kopieren und ChatGPT öffnen") { open(draft) }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(24)
-        .frame(width: 620, height: 430)
+        guard let backend, !cards.isEmpty, !text.isEmpty else { return }
+        openNativeChat(TutorSessionRequest(scope: scope, cards: cards, backend: backend, firstQuestion: text))
     }
 }
