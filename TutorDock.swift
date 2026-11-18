@@ -22,8 +22,17 @@ final class TutorSettings: ObservableObject {
     @Published var key = ""
 }
 
+private struct TutorExplanation: Codable, Identifiable {
+    var id = UUID()
+    let scope: String
+    let question: String
+    let answer: String
+    let savedAt: Date
+}
+
 struct TutorDock: View {
     let scope: String
+    let scopeID: String
     let cards: [Card]
     @Binding var expanded: Bool
     @Binding var setupRequested: Bool
@@ -37,6 +46,19 @@ struct TutorDock: View {
     @State private var inFlight: Task<Void, Never>?
     @State private var error: String?
     @State private var copied = false
+    @State private var showingHandoff = false
+    @State private var handoffDraft = ""
+    @State private var showingExplanations = false
+    @State private var explanationDraft = ""
+    @AppStorage("tutor.explanations.v1") private var savedExplanations = Data()
+
+    private var explanations: [TutorExplanation] {
+        (try? JSONDecoder().decode([TutorExplanation].self, from: savedExplanations)) ?? []
+    }
+
+    private var scopeExplanations: [TutorExplanation] {
+        explanations.filter { $0.scope == scopeID }.sorted { $0.savedAt > $1.savedAt }
+    }
     @FocusState private var focused: Bool
 
     private var backend: TutorClient.Backend? {
@@ -72,6 +94,10 @@ struct TutorDock: View {
             .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
         }
         .sheet(isPresented: $showingSettings) { configuration }
+        .sheet(isPresented: $showingHandoff) {
+            TutorHandoffPreview(scope: scope, draft: $handoffDraft, open: openInChatGPT)
+        }
+        .sheet(isPresented: $showingExplanations) { explanationLibrary }
         .onChange(of: setupRequested) {
             if setupRequested {
                 showingSettings = true
@@ -147,6 +173,17 @@ struct TutorDock: View {
                 transcript
             }
 
+            if handoff || !scopeExplanations.isEmpty {
+                Button {
+                    explanationDraft = ""
+                    showingExplanations = true
+                } label: {
+                    Label(scopeExplanations.isEmpty ? "Antwort ablegen" : "Erklärungen (\(scopeExplanations.count))",
+                          systemImage: "bookmark")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(mint)
+            }
             if let error {
                 Text(error).font(.caption).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -169,9 +206,9 @@ struct TutorDock: View {
                     .lineLimit(1...3)
                     .focused($focused)
                     .disabled(!canAsk)
-                Button(action: handoff ? openInChatGPT : ask) {
+                Button(action: handoff ? previewHandoff : ask) {
                     if handoff {
-                        Label("In ChatGPT öffnen", systemImage: "arrow.up.right")
+                        Label("Vorschau", systemImage: "arrow.up.right")
                     } else {
                         Image(systemName: "arrow.up").accessibilityLabel("Frage senden")
                     }
@@ -275,10 +312,65 @@ struct TutorDock: View {
         }
     }
 
-    private func openInChatGPT() {
+    private var explanationLibrary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Erklärungen").font(.title2.bold())
+            Label(scope, systemImage: "folder").foregroundStyle(soft)
+            if !scopeExplanations.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(scopeExplanations) { entry in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(entry.question).font(.headline)
+                                Text(verbatim: entry.answer).textSelection(.enabled)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(panel, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+                .frame(maxHeight: 195)
+            }
+            Text("Kopiere die Erklärung in ChatGPT und füge sie hier mit ⌘V ein.")
+                .foregroundStyle(soft)
+            TextEditor(text: $explanationDraft)
+                .frame(minHeight: 105)
+                .border(.secondary.opacity(0.3))
+                .accessibilityLabel("Erklärung aus ChatGPT")
+            HStack {
+                Spacer()
+                Button("Schließen", role: .cancel) { showingExplanations = false }
+                Button("Im Ordner speichern") { saveExplanation() }
+                    .disabled(explanationDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
+    }
+
+    private func saveExplanation() {
+        let answer = explanationDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !answer.isEmpty else { return }
+        let heading = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entry = TutorExplanation(scope: scopeID, question: heading.isEmpty ? "Gespeicherte Erklärung" : heading,
+                                     answer: answer, savedAt: .now)
+        guard let data = try? JSONEncoder().encode(explanations + [entry]) else { return }
+        savedExplanations = data
+        explanationDraft = ""
+    }
+
+    private func previewHandoff() {
         let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard handoff, !text.isEmpty, !cards.isEmpty else { return }
-        let prompt = TutorClient.chatGPTPrompt(cards: cards, scope: scope, question: text)
+        handoffDraft = TutorClient.chatGPTPrompt(cards: cards, scope: scope, question: text)
+        showingHandoff = true
+        copied = false
+    }
+
+    private func openInChatGPT(_ draft: String) {
+        let prompt = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.setString(prompt, forType: .string) else {
@@ -287,6 +379,7 @@ struct TutorDock: View {
         }
         error = nil
         copied = true
+        showingHandoff = false
         let web = URL(string: "https://chatgpt.com/")!
         let workspace = NSWorkspace.shared
         let chatGPTApp = workspace.urlForApplication(withBundleIdentifier: "com.openai.codex")
@@ -321,5 +414,36 @@ struct TutorDock: View {
                 if !Task.isCancelled { self.error = error.localizedDescription }
             }
         }
+    }
+}
+
+
+private struct TutorHandoffPreview: View {
+    let scope: String
+    @Binding var draft: String
+    let open: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Anfrage für ChatGPT").font(.title2.bold())
+            Label(scope, systemImage: "folder").foregroundStyle(soft)
+            Text("Prüfe den Text und entferne bei Bedarf einzelne Karten. Du sendest die Anfrage anschließend in ChatGPT.")
+                .fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: $draft)
+                .font(.system(size: 13, design: .monospaced))
+                .frame(minHeight: 250)
+                .border(.secondary.opacity(0.3))
+                .accessibilityLabel("Anfrage und Kartentexte")
+            HStack {
+                Spacer()
+                Button("Abbrechen", role: .cancel) { dismiss() }
+                Button("Kopieren und ChatGPT öffnen") { open(draft) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 620, height: 430)
     }
 }

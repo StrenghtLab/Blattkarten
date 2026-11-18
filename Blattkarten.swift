@@ -624,7 +624,8 @@ struct ContentView: View {
                                center: .topTrailing, startRadius: 10, endRadius: 740)
             }
             .overlay(alignment: .bottomTrailing) {
-                TutorDock(scope: tutorScope, cards: tutorCards, expanded: $tutorOpen, setupRequested: $showTutorSetup, settings: tutorSettings)
+                TutorDock(scope: tutorScope, scopeID: currentFolder.map { "folder:" + $0.id.uuidString } ?? "subject:" + selectedSubject,
+                          cards: tutorCards, expanded: $tutorOpen, setupRequested: $showTutorSetup, settings: tutorSettings)
                     .id(TutorScopeIdentity(subject: selectedSubject, folderID: currentFolder?.id))
                     .padding(18)
             }
@@ -1275,7 +1276,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.1"
         checking = true
         Task { @MainActor in
             defer { checking = false }
