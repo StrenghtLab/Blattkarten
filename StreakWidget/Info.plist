@@ -2,15 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleExecutable</key><string>StreakWidget</string>
-    <key>CFBundleIdentifier</key><string>de.blattkarten.mac.StreakWidget</string>
-    <key>CFBundleName</key><string>Lernflamme</string>
-    <key>CFBundleDisplayName</key><string>Lernflamme</string>
-    <key>CFBundlePackageType</key><string>XPC!</string>
-    <key>CFBundleShortVersionString</key><string>2.7</string>
-    <key>CFBundleVersion</key><string>18</string>
-    <key>LSMinimumSystemVersion</key><string>14.0</string>
-    <key>NSExtension</key>
-    <dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>
+	<key>CFBundleDisplayName</key>
+	<string>Lernflamme</string>
+	<key>CFBundleExecutable</key>
+	<string>StreakWidget</string>
+	<key>CFBundleIdentifier</key>
+	<string>de.blattkarten.mac.StreakWidget</string>
+	<key>CFBundleName</key>
+	<string>Lernflamme</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.8</string>
+	<key>CFBundleVersion</key>
+	<string>19</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.widgetkit-extension</string>
+	</dict>
 </dict>
 </plist>
