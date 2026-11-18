@@ -15,6 +15,7 @@ struct Card: Codable, Identifiable {
     var subject: String? = nil
     var worksheet: String? = nil
     var folderID: UUID? = nil
+    var review: LearningProgress? = nil
 
     var subjectName: String { subject ?? "Allgemein" }
 }
@@ -512,6 +513,11 @@ struct ContentView: View {
     @State private var currentFolderID: UUID?
     @State private var addingFolder = false
     @State private var newFolder = ""
+    @State private var search = ""
+    @State private var importNotice: String?
+    @State private var confirmCloudImport = false
+    @State private var showTutorSetup = false
+    @State private var reviewClock = Date.now
 
     private var folders: [WorksheetFolder] {
         (try? JSONDecoder().decode([WorksheetFolder].self, from: savedFolders)) ?? []
@@ -577,6 +583,12 @@ struct ContentView: View {
     }
 
     private var practiceCards: [Card] { currentFolder == nil ? subjectCards : visibleCards }
+    private var searchActive: Bool { !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var displayedCards: [Card] { searchActive ? tutorCards.filter { $0.matches(search) } : visibleCards }
+
+    private var dueCards: [Card] {
+        practiceCards.filter { $0.isDue(at: reviewClock) }
+    }
 
     private var trimmedSubject: String { newSubject.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -612,7 +624,7 @@ struct ContentView: View {
                                center: .topTrailing, startRadius: 10, endRadius: 740)
             }
             .overlay(alignment: .bottomTrailing) {
-                TutorDock(scope: tutorScope, cards: tutorCards, expanded: $tutorOpen, settings: tutorSettings)
+                TutorDock(scope: tutorScope, cards: tutorCards, expanded: $tutorOpen, setupRequested: $showTutorSetup, settings: tutorSettings)
                     .id(TutorScopeIdentity(subject: selectedSubject, folderID: currentFolder?.id))
                     .padding(18)
             }
@@ -625,12 +637,27 @@ struct ContentView: View {
             if !subjects.contains(selectedSubject) { selectedSubject = "Allgemein" }
             appeared = true
         }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { reviewClock = $0 }
         .onChange(of: selectedSubject) {
             currentFolderID = nil
+            search = ""
             page = "Sammlung"
             session = []
             flipped = false
             appeared = true
+        }
+        .confirmationDialog("Arbeitsblatt mit OpenAI verarbeiten?", isPresented: $confirmCloudImport) {
+            Button("Datei wählen und Text senden") { chooseFile(usingAI: true) }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Beim Import wird der erkannte Text des ausgewählten Arbeitsblatts an OpenAI gesendet. Es können API-Kosten anfallen.")
+        }
+        .alert("Arbeitsblatt importiert", isPresented: Binding(
+            get: { importNotice != nil }, set: { if !$0 { importNotice = nil } }
+        )) {
+            Button("OK", role: .cancel) { importNotice = nil }
+        } message: {
+            Text(importNotice ?? "")
         }
         .alert("Fach hinzufügen", isPresented: $addingSubject) {
             TextField("Name des Fachs", text: $newSubject)
@@ -663,7 +690,9 @@ struct ContentView: View {
                 persist()
             } : nil) { updated in
                 if let position = cards.firstIndex(where: { $0.id == updated.id }) {
-                    cards[position] = updated
+                    var revised = updated
+                    if cards[position].contentKey != updated.contentKey { revised.review = nil }
+                    cards[position] = revised
                 } else { cards.append(updated) }
                 session = []
                 persist()
@@ -756,6 +785,7 @@ struct ContentView: View {
 
     func showFolder(_ id: UUID?) {
         currentFolderID = id
+        search = ""
         page = "Sammlung"
         session = []
         flipped = false
@@ -818,7 +848,7 @@ struct ContentView: View {
 
     func navigation(_ title: String, _ icon: String) -> some View {
         Button {
-            if title == "Üben", session.isEmpty, !practiceCards.isEmpty { begin(practiceCards) }
+            if title == "Üben", session.isEmpty, !practiceCards.isEmpty { begin(dueCards.isEmpty ? practiceCards : dueCards) }
             page = title
         } label: {
             Label(title, systemImage: icon)
@@ -840,7 +870,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Karteikarten")
                             .font(.title2.bold()).lineLimit(1)
-                        Text("\(visibleCards.count) \(visibleCards.count == 1 ? "Karte" : "Karten")")
+                        Text(searchActive ? "\(displayedCards.count) Treffer" : "\(visibleCards.count) \(visibleCards.count == 1 ? "Karte" : "Karten")")
                             .font(.caption).foregroundStyle(soft)
                     }
                     Spacer()
@@ -863,17 +893,37 @@ struct ContentView: View {
                         .fixedSize()
                     }
                     if !practiceCards.isEmpty {
-                        Button { begin(practiceCards) } label: {
-                            Label("Jetzt üben", systemImage: "bolt.fill")
-                        }.buttonStyle(Pill(tint: mint))
+                        Menu {
+                            Button("Fällige Karten (\(dueCards.count))") { begin(dueCards) }.disabled(dueCards.isEmpty)
+                            Button("Alle Karten üben") { begin(practiceCards) }
+                            if searchActive {
+                                Button("Suchtreffer üben") { begin(displayedCards) }.disabled(displayedCards.isEmpty)
+                            }
+                        } label: {
+                            Label("Üben", systemImage: "bolt.fill")
+                        }
+                        .fixedSize()
                     }
                 }
-                if visibleCards.isEmpty {
-                    Text("Hier erscheinen deine Karten nach dem ersten Import.")
+                if !tutorCards.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(soft)
+                        TextField("Karten oder Arbeitsblätter suchen", text: $search).textFieldStyle(.plain)
+                        if searchActive {
+                            Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                                .buttonStyle(.plain).foregroundStyle(soft).accessibilityLabel("Suche leeren")
+                        } else {
+                            Text("\(dueCards.count) fällig").font(.caption).foregroundStyle(soft)
+                        }
+                    }
+                    .padding(10).background(panel, in: RoundedRectangle(cornerRadius: 9))
+                }
+                if displayedCards.isEmpty {
+                    Text(searchActive ? "Keine passenden Karten gefunden." : "Hier erscheinen deine Karten nach dem ersten Import.")
                         .foregroundStyle(soft).padding(.vertical, 12)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 470), spacing: 20)], spacing: 20) {
-                        ForEach(Array(visibleCards.enumerated()), id: \.element.id) { index, card in
+                        ForEach(Array(displayedCards.enumerated()), id: \.element.id) { index, card in
                             PaperCardPair(
                                 card: card,
                                 source: card.worksheet ?? (card.subject == nil && !legacyTitle.isEmpty ? legacyTitle : nil),
@@ -902,8 +952,11 @@ struct ContentView: View {
                     Button { camera = true } label: {
                         Label("Kamera öffnen", systemImage: "camera")
                     }.buttonStyle(Pill(tint: mint))
-                    Button(action: chooseFile) {
+                    Button { chooseFile() } label: {
                         Label("Datei öffnen", systemImage: "arrow.up.document")
+                    }.buttonStyle(Pill())
+                    Button(action: startAIImport) {
+                        Label("Datei mit KI", systemImage: "sparkles")
                     }.buttonStyle(Pill())
                 }.disabled(busy)
             }
@@ -980,42 +1033,83 @@ struct ContentView: View {
     }
 
     func advance(_ understood: Bool) {
-        if understood { known += 1 } else { missed.append(session[cursor]) }
+        let card = session[cursor]
+        if understood { known += 1 } else { missed.append(card) }
+        if let position = cards.firstIndex(where: { $0.id == card.id }) {
+            reviewClock = .now
+            cards[position].review = LearningProgress.after(cards[position].review, understood: understood, now: reviewClock)
+            persist()
+        }
         flipped = false
         cursor += 1
     }
 
     func persist() { if let encoded = try? JSONEncoder().encode(cards) { saved = encoded } }
 
-    func chooseFile() {
+    func startAIImport() {
+        if tutorSettings.provider == .openAI {
+            guard !tutorSettings.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                tutorOpen = true
+                showTutorSetup = true
+                return
+            }
+            confirmCloudImport = true
+        } else {
+            chooseFile(usingAI: true)
+        }
+    }
+
+    func chooseFile(usingAI: Bool = false) {
         let picker = NSOpenPanel()
         picker.allowedContentTypes = [.image, .pdf]
         picker.allowsMultipleSelection = false
         picker.message = "Wähle ein Arbeitsblatt als Bild oder PDF."
-        if picker.runModal() == .OK, let url = picker.url { importFile(url) }
+        if picker.runModal() == .OK, let url = picker.url { importFile(url, usingAI: usingAI) }
     }
 
-    func importFile(_ url: URL) {
-        process(title: url.deletingPathExtension().lastPathComponent) { try Worksheet.read(url) }
+    func importFile(_ url: URL, usingAI: Bool = false) {
+        process(title: url.deletingPathExtension().lastPathComponent, usingAI: usingAI) { try Worksheet.read(url) }
     }
 
-    func process(title: String, load: @escaping @Sendable () throws -> String) {
+    func process(title: String, usingAI: Bool = false, load: @escaping @Sendable () throws -> String) {
         guard !busy else { return }
         let importSubject = selectedSubject
         let importFolderID = currentFolder?.id
+        let cloudKey = usingAI && tutorSettings.provider == .openAI
+            ? tutorSettings.key.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        let preferredModel = tutorSettings.model
         busy = true
         Task { @MainActor in
             defer { busy = false }
             do {
-                let generated = try await Task.detached {
-                    let text = try load()
-                    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw StudyError.empty }
-                    let result = Worksheet.cards(from: text)
-                    guard !result.isEmpty else { throw StudyError.noFacts }
-                    return result
-                }.value
+                let text = try await Task.detached { try load() }.value
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw StudyError.empty }
+                let generated: [Card]
+                if usingAI {
+                    let backend: TutorClient.Backend
+                    if let cloudKey {
+                        backend = .openAI(cloudKey)
+                    } else {
+                        let local = try await TutorClient.localModels()
+                        guard let model = local.contains(preferredModel) ? preferredModel : local.first else {
+                            throw TutorClient.Failure.unavailable
+                        }
+                        backend = .local(model)
+                    }
+                    generated = try await TutorClient.createCards(backend: backend, worksheet: text)
+                } else {
+                    generated = await Task.detached { Worksheet.cards(from: text) }.value
+                    guard !generated.isEmpty else { throw StudyError.noFacts }
+                }
+
+                var knownCards = Set(cards.filter { $0.subjectName == importSubject && $0.folderID == importFolderID }.map(\.contentKey))
+                let fresh = generated.filter { knownCards.insert($0.contentKey).inserted }
+                guard !fresh.isEmpty else {
+                    importNotice = "Diese Karten gibt es hier bereits."
+                    return
+                }
                 if selectedSubject == importSubject && currentFolder?.id == importFolderID { appeared = reduceMotion }
-                cards = generated.map {
+                cards = fresh.map {
                     Card(id: $0.id, question: $0.question, answer: $0.answer, subject: importSubject, worksheet: title, folderID: importFolderID)
                 } + cards
                 persist()
@@ -1176,7 +1270,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.8"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.9"
         checking = true
         Task { @MainActor in
             defer { checking = false }

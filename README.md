@@ -17,3 +17,9 @@ Mit den Xcode Command Line Tools erstellt `./build.sh` die App und `./make-dmg.s
 ## KI-Lernchat
 
 Öffne ein Fach oder einen Ordner und klicke unten rechts auf **KI-Lernchat**. Der Chat verwendet passende Karteikarten aus dem geöffneten Bereich einschließlich seiner Unterordner. Unter **KI einrichten** kannst du ein auf deinem Mac laufendes Ollama-Modell wählen oder einen OpenAI-API-Schlüssel eingeben. Der Schlüssel bleibt bis zum Beenden der App im Arbeitsspeicher. Bei OpenAI werden die Frage und passende Kartentexte erst beim Senden an OpenAI übertragen.
+
+## Suche, Wiederholung und KI-Import
+
+Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Unter **Üben** kannst du fällige Karten, die Suchtreffer oder alle Karten auswählen. Gewusste Karten werden mit wachsenden Abständen wieder fällig. Schwierige Karten kommen früher zurück. Beim erneuten Import werden identische Karten am selben Ablageort übersprungen.
+
+**Datei mit KI** lässt ein eingerichtetes Modell den erkannten Text für die Kartenerstellung auswerten. Bei OpenAI sendet die App den erkannten Text nur nach einer Bestätigung. **Datei öffnen** verwendet die lokale Kartenerstellung.

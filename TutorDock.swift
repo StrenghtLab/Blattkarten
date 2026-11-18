@@ -17,6 +17,7 @@ struct TutorDock: View {
     let scope: String
     let cards: [Card]
     @Binding var expanded: Bool
+    @Binding var setupRequested: Bool
     @ObservedObject var settings: TutorSettings
     @State private var showingSettings = false
     @State private var models: [String] = []
@@ -53,6 +54,12 @@ struct TutorDock: View {
             .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
         }
         .sheet(isPresented: $showingSettings) { configuration }
+        .onChange(of: setupRequested) {
+            if setupRequested {
+                showingSettings = true
+                setupRequested = false
+            }
+        }
         .task(id: scope) {
             if expanded && settings.provider == .local { await loadModels() }
         }
@@ -95,9 +102,21 @@ struct TutorDock: View {
                         .buttonStyle(Pill())
                 }
             } else if conversation.isEmpty {
-                Text("Was verstehst du noch nicht? Frag zum Beispiel: „Kannst du mir das mit einem einfachen Beispiel erklären?“")
-                    .foregroundStyle(soft)
-                    .padding(.vertical, 12)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Was verstehst du noch nicht?").foregroundStyle(soft)
+                    HStack(spacing: 8) {
+                        Button("Einfaches Beispiel") {
+                            question = "Erkläre mir einen wichtigen Begriff aus diesem Ordner mit einem einfachen Beispiel."
+                            focused = true
+                        }
+                        Button("Mini-Quiz") {
+                            question = "Stell mir eine kurze Frage zum wichtigsten Stoff in diesem Ordner. Warte auf meine Antwort."
+                            focused = true
+                        }
+                    }
+                    .buttonStyle(Pill())
+                }
+                .padding(.vertical, 6)
             } else {
                 transcript
             }
@@ -226,7 +245,8 @@ struct TutorDock: View {
         let text = String(question.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1_500))
         guard let backend, !cards.isEmpty, !text.isEmpty, inFlight == nil else { return }
         let history = conversation
-        let material = TutorClient.material(cards: cards, scope: scope, question: text)
+        let earlierQuestion = history.last { $0.role == .user }?.content ?? ""
+        let material = TutorClient.material(cards: cards, scope: scope, question: text + " " + earlierQuestion)
         conversation.append(TutorMessage(role: .user, content: text))
         question = ""
         error = nil
