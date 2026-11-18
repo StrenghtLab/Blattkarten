@@ -499,6 +499,7 @@ struct ContentView: View {
     @State private var error: String?
     @State private var appeared = false
     @State private var hovering = false
+    @State private var printError = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -545,6 +546,11 @@ struct ContentView: View {
                 } else { cards.append(updated) }
                 persist()
             }
+        }
+        .alert("Drucken nicht verfügbar", isPresented: $printError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Die Druckseiten konnten nicht erstellt werden.")
         }
         .alert("Arbeitsblatt konnte nicht verarbeitet werden", isPresented: Binding(
             get: { error != nil }, set: { if !$0 { error = nil } }
@@ -612,6 +618,11 @@ struct ContentView: View {
                         Button { editing = Card(question: "", answer: "") } label: {
                             Label("Karte", systemImage: "plus")
                         }.buttonStyle(Pill())
+                        Button { printError = !CardPrinting.printAll(cards) } label: {
+                            Label("Alle drucken", systemImage: "printer")
+                        }
+                        .buttonStyle(Pill())
+                        .keyboardShortcut("p")
                         Button { begin(cards) } label: {
                             Label("Jetzt üben", systemImage: "bolt.fill")
                         }.buttonStyle(Pill(tint: mint))
@@ -626,15 +637,19 @@ struct ContentView: View {
                             Button { editing = card } label: {
                                 VStack(alignment: .leading, spacing: 13) {
                                     HStack {
-                                        Image(systemName: "rectangle.on.rectangle").foregroundStyle(index.isMultiple(of: 2) ? mint : lilac)
+                                        Text("LERNKARTE").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(index.isMultiple(of: 2) ? mint : lilac)
                                         Spacer()
                                         Image(systemName: "pencil").foregroundStyle(soft)
                                     }
+                                    CardIllustration(artwork: CardArtwork(card))
+                                        .frame(height: 55)
+                                        .foregroundStyle(index.isMultiple(of: 2) ? mint : lilac)
+                                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                                        .accessibilityHidden(true)
                                     Text(card.question).font(.headline).lineLimit(3)
-                                    Text(card.answer).font(.subheadline).foregroundStyle(soft).lineLimit(2)
                                     Spacer(minLength: 0)
                                 }
-                                .padding(17).frame(height: 145)
+                                .padding(17).frame(height: 165)
                                 .background(panel, in: RoundedRectangle(cornerRadius: 16))
                                 .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.09)) }
                             }
@@ -709,7 +724,7 @@ struct ContentView: View {
                 Button {
                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { flipped.toggle() }
                 } label: {
-                    FlipCard(question: card.question, answer: card.answer, angle: flipped ? 180 : 0, reduceMotion: reduceMotion)
+                    FlipCard(question: card.question, answer: card.answer, artwork: CardArtwork(card), angle: flipped ? 180 : 0, reduceMotion: reduceMotion)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(flipped ? card.answer : card.question)
@@ -788,6 +803,7 @@ struct ContentView: View {
 struct FlipCard: View, Animatable {
     let question: String
     let answer: String
+    let artwork: CardArtwork
     var angle: Double
     let reduceMotion: Bool
     var animatableData: Double {
@@ -800,6 +816,9 @@ struct FlipCard: View, Animatable {
             VStack(alignment: .leading, spacing: 20) {
                 Label(back ? "Antwort" : "Frage", systemImage: back ? "checkmark.circle" : "questionmark.circle")
                     .font(.subheadline.bold())
+                if back {
+                    CardIllustration(artwork: artwork).frame(maxWidth: 310).frame(height: 64)
+                }
                 Text(back ? answer : question).font(.system(size: 29, weight: .bold))
                     .textSelection(.disabled)
             }
@@ -909,7 +928,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.4"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.5"
         checking = true
         Task { @MainActor in
             defer { checking = false }
