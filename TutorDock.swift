@@ -1,14 +1,23 @@
 import SwiftUI
+import AppKit
 
 @MainActor
 final class TutorSettings: ObservableObject {
     enum Provider: String, CaseIterable, Identifiable {
         case local = "Lokal mit Ollama"
-        case openAI = "OpenAI"
+        case openAI = "OpenAI API"
+        case chatGPT = "ChatGPT-App oder Browser"
         var id: Self { self }
     }
 
-    @Published var provider: Provider = .local
+    @Published var provider: Provider {
+        didSet { UserDefaults.standard.set(provider.rawValue, forKey: "tutor.provider.v1") }
+    }
+
+    init() {
+        let saved = UserDefaults.standard.string(forKey: "tutor.provider.v1") ?? ""
+        provider = Provider(rawValue: saved) ?? .local
+    }
     @Published var model = ""
     @Published var key = ""
 }
@@ -27,16 +36,25 @@ struct TutorDock: View {
     @State private var conversation: [TutorMessage] = []
     @State private var inFlight: Task<Void, Never>?
     @State private var error: String?
+    @State private var copied = false
     @FocusState private var focused: Bool
 
     private var backend: TutorClient.Backend? {
         switch settings.provider {
         case .local:
             models.contains(settings.model) ? .local(settings.model) : nil
+        case .chatGPT:
+            nil
         case .openAI:
             settings.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil :
                 .openAI(settings.key.trimmingCharacters(in: .whitespacesAndNewlines))
         }
+    }
+
+    private var handoff: Bool { settings.provider == .chatGPT }
+
+    private var canAsk: Bool {
+        !cards.isEmpty && (handoff || backend != nil)
     }
 
     var body: some View {
@@ -94,6 +112,14 @@ struct TutorDock: View {
                 Text("Füge hier zuerst Karteikarten hinzu oder öffne einen Ordner mit Lernstoff.")
                     .foregroundStyle(soft)
                     .padding(.vertical, 12)
+            } else if handoff {
+                Text("ChatGPT öffnet sich mit deiner Frage in der Zwischenablage. Füge sie in einem Chat mit ⌘V ein und sende sie ab.")
+                    .foregroundStyle(soft)
+                    .fixedSize(horizontal: false, vertical: true)
+                if copied {
+                    Label("Frage und passende Karten kopiert.", systemImage: "checkmark.circle")
+                        .font(.caption).foregroundStyle(mint)
+                }
             } else if backend == nil {
                 VStack(alignment: .leading, spacing: 9) {
                     Text("Richte ein KI-Modell ein, um Fragen zu deinen Karten zu stellen.")
@@ -142,12 +168,16 @@ struct TutorDock: View {
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...3)
                     .focused($focused)
-                    .disabled(cards.isEmpty || backend == nil)
-                Button(action: ask) {
-                    Image(systemName: "arrow.up").accessibilityLabel("Frage senden")
+                    .disabled(!canAsk)
+                Button(action: handoff ? openInChatGPT : ask) {
+                    if handoff {
+                        Label("In ChatGPT öffnen", systemImage: "arrow.up.right")
+                    } else {
+                        Image(systemName: "arrow.up").accessibilityLabel("Frage senden")
+                    }
                 }
                 .buttonStyle(Pill(tint: mint))
-                .disabled(cards.isEmpty || backend == nil || inFlight != nil ||
+                .disabled(!canAsk || inFlight != nil ||
                           question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -201,6 +231,9 @@ struct TutorDock: View {
                         .disabled(checkingModels)
                     Link("Ollama öffnen", destination: URL(string: "https://ollama.com/download/mac")!)
                 }
+            } else if handoff {
+                Text("Verwende dein normales ChatGPT-Konto. Blattkarten kopiert passende Kartentexte und deine Frage. Antworten erscheinen in ChatGPT.")
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("OpenAI verarbeitet die Frage und die ausgewählten Kartentexte. Für Anfragen können API-Kosten anfallen.")
                     .fixedSize(horizontal: false, vertical: true)
@@ -219,6 +252,7 @@ struct TutorDock: View {
         .onChange(of: settings.provider) {
             inFlight?.cancel()
             conversation = []
+            copied = false
             error = nil
             if settings.provider == .local { Task { await loadModels() } }
         }
@@ -238,6 +272,31 @@ struct TutorDock: View {
             guard !Task.isCancelled else { return }
             models = []
             modelStatus = error.localizedDescription
+        }
+    }
+
+    private func openInChatGPT() {
+        let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard handoff, !text.isEmpty, !cards.isEmpty else { return }
+        let prompt = TutorClient.chatGPTPrompt(cards: cards, scope: scope, question: text)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(prompt, forType: .string) else {
+            error = "Die Frage konnte nicht in die Zwischenablage kopiert werden."
+            return
+        }
+        error = nil
+        copied = true
+        let web = URL(string: "https://chatgpt.com/")!
+        let workspace = NSWorkspace.shared
+        let chatGPTApp = workspace.urlForApplication(withBundleIdentifier: "com.openai.codex")
+            ?? workspace.urlForApplication(withBundleIdentifier: "com.openai.chat")
+        if let app = chatGPTApp {
+            workspace.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                if error != nil { DispatchQueue.main.async { NSWorkspace.shared.open(web) } }
+            }
+        } else {
+            workspace.open(web)
         }
     }
 

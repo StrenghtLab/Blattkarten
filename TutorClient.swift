@@ -124,6 +124,19 @@ enum TutorClient {
         return result
     }
 
+    static func chatGPTPrompt(cards: [Card], scope: String, question: String) -> String {
+        let reference = material(cards: cards, scope: scope, question: question)
+        return """
+        \(instructions)
+
+        --- Beginn des Lernmaterials ---
+        \(reference)
+        --- Ende des Lernmaterials ---
+
+        Meine Frage: \(question)
+        """
+    }
+
     static func reply(backend: Backend, material: String, history: [TutorMessage], question: String) async throws -> String {
         var input = Array(history.suffix(4)).map { TutorMessage(role: $0.role, content: String($0.content.prefix(800))) }
         input.append(TutorMessage(role: .user, content: "\(material)\nFrage des Lernenden: \(question)"))

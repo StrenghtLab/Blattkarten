@@ -23,3 +23,7 @@ Mit den Xcode Command Line Tools erstellt `./build.sh` die App und `./make-dmg.s
 Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Unter **Üben** kannst du fällige Karten, die Suchtreffer oder alle Karten auswählen. Gewusste Karten werden mit wachsenden Abständen wieder fällig. Schwierige Karten kommen früher zurück. Beim erneuten Import werden identische Karten am selben Ablageort übersprungen.
 
 **Datei mit KI** lässt ein eingerichtetes Modell den erkannten Text für die Kartenerstellung auswerten. Bei OpenAI sendet die App den erkannten Text nur nach einer Bestätigung. **Datei öffnen** verwendet die lokale Kartenerstellung.
+
+### ChatGPT ohne API-Schlüssel
+
+Wähle im KI-Lernchat unter **Anbieter** die Option **ChatGPT-App oder Browser**. Mit **In ChatGPT öffnen** kopiert Blattkarten deine Frage und passende Karten aus dem gewählten Bereich. Füge den Text mit ⌘V in ChatGPT ein und sende ihn dort. Blattkarten öffnet die Mac-App, wenn sie verfügbar ist, sonst ChatGPT im Browser. Für die automatische Funktion **Datei mit KI** ist weiterhin ein lokales Modell oder die OpenAI API nötig.

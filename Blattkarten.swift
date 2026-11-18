@@ -1047,6 +1047,11 @@ struct ContentView: View {
     func persist() { if let encoded = try? JSONEncoder().encode(cards) { saved = encoded } }
 
     func startAIImport() {
+        if tutorSettings.provider == .chatGPT {
+            tutorOpen = true
+            showTutorSetup = true
+            return
+        }
         if tutorSettings.provider == .openAI {
             guard !tutorSettings.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 tutorOpen = true
@@ -1270,7 +1275,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.9"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0"
         checking = true
         Task { @MainActor in
             defer { checking = false }
