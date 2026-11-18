@@ -28,7 +28,7 @@ Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Un
 
 Wähle unter **KI einrichten** die **OpenAI API** oder ein lokales **Ollama**-Modell. Gib deine Frage im Blattkarten-Lernchat ein und klicke auf **Senden**. Frage, Antwort und Rückfragen bleiben in der nativen Chat-Ansicht von Blattkarten. Für das OpenAI-Modell brauchst du einen API-Schlüssel.
 
-Vor jeder Übungsrunde wählst du zwischen **Antworten eintippen** und **Karten umdrehen**. Im Tippmodus zeigt die Eingabetaste die Musterantwort. Bewerte dich anschließend mit **Gewusst** oder **Nochmal**.
+Vor jeder Übungsrunde wählst du zwischen **Antworten eintippen** und **Karten umdrehen**. Im Tippmodus zeigt die Eingabetaste die Musterantwort. Bewerte dich anschließend mit **Gewusst** oder **Nochmal**. Beim ersten **Nochmal** bekommst du einen zweiten Versuch. Nach einem zweiten **Nochmal** kommt die Karte auf die Wiederholungsliste.
 
 ## Lernflamme
 

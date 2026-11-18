@@ -620,6 +620,7 @@ struct ContentView: View {
     @State private var missed: [Card] = []
     @State private var flipped = false
     @State private var typedAnswer = ""
+    @State private var retryingCard = false
     @State private var practiceMode: PracticeMode = .flip
     @State private var practiceSetup: PracticeSetup?
     @FocusState private var typingPracticeAnswer: Bool
@@ -1102,6 +1103,15 @@ struct ContentView: View {
                     } else {
                         let card = session[cursor]
                         Text("Karte \(cursor + 1) von \(session.count)").font(.subheadline.bold()).foregroundStyle(soft)
+                        if retryingCard {
+                            Label("Noch ein Versuch", systemImage: "arrow.counterclockwise")
+                                .font(.caption.bold())
+                                .foregroundStyle(Color(red: 1, green: 0.70, blue: 0.71))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 7)
+                                .background(Color(red: 0.43, green: 0.17, blue: 0.23), in: RoundedRectangle(cornerRadius: 7))
+                        }
                         Button {
                             togglePracticeCard()
                         } label: {
@@ -1172,12 +1182,21 @@ struct ContentView: View {
         cursor = 0
         known = 0
         missed = []
+        retryingCard = false
         typedAnswer = ""
         flipped = false
         page = "Üben"
     }
 
     func advance(_ understood: Bool) {
+        guard flipped, session.indices.contains(cursor) else { return }
+        if !understood && !retryingCard {
+            retryingCard = true
+            typedAnswer = ""
+            togglePracticeCard()
+            return
+        }
+
         let card = session[cursor]
         if understood { known += 1 } else { missed.append(card) }
         if let position = cards.firstIndex(where: { $0.id == card.id }) {
@@ -1187,6 +1206,7 @@ struct ContentView: View {
             rewardStudy(worksheet: false)
         }
         typedAnswer = ""
+        retryingCard = false
         flipped = false
         cursor += 1
     }
@@ -1470,7 +1490,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.10"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.11"
         checking = true
         Task { @MainActor in
             defer { checking = false }
