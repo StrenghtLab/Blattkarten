@@ -494,6 +494,11 @@ let mint = Color(red: 0.56, green: 0.98, blue: 0.78)
 let lilac = Color(red: 0.72, green: 0.66, blue: 1)
 let soft = Color(red: 0.69, green: 0.74, blue: 0.83)
 
+private struct TutorScopeIdentity: Hashable {
+    let subject: String
+    let folderID: UUID?
+}
+
 struct ContentView: View {
     @AppStorage("worksheet.deck.v1") private var saved = Data()
     @AppStorage("worksheet.title.v1") private var legacyTitle = ""
@@ -501,6 +506,8 @@ struct ContentView: View {
     @AppStorage("worksheet.customSubjects.v1") private var savedSubjects = Data()
     @State private var newSubject = ""
     @State private var addingSubject = false
+    @State private var tutorOpen = false
+    @StateObject private var tutorSettings = TutorSettings()
     @AppStorage("worksheet.folders.v1") private var savedFolders = Data()
     @State private var currentFolderID: UUID?
     @State private var addingFolder = false
@@ -517,6 +524,31 @@ struct ContentView: View {
     private var childFolders: [WorksheetFolder] {
         folders.filter { $0.subject == selectedSubject && $0.parentID == currentFolder?.id }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private var tutorCards: [Card] {
+        guard let root = currentFolder?.id else { return subjectCards }
+        var included: Set<UUID> = [root]
+        var pending = [root]
+        let children = Dictionary(grouping: folders.filter { $0.subject == selectedSubject }, by: \.parentID)
+        while let parent = pending.popLast() {
+            for child in children[parent] ?? [] where included.insert(child.id).inserted {
+                pending.append(child.id)
+            }
+        }
+        return subjectCards.filter { card in card.folderID.map(included.contains) ?? false }
+    }
+
+    private var tutorScope: String {
+        var names: [String] = []
+        var folder = currentFolder
+        var seen = Set<UUID>()
+        let byID = Dictionary(folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        while let entry = folder, seen.insert(entry.id).inserted {
+            names.append(entry.name)
+            folder = entry.parentID.flatMap { byID[$0] }
+        }
+        return ([selectedSubject] + names.reversed()).joined(separator: " / ")
     }
 
     private var location: String { currentFolder?.name ?? selectedSubject }
@@ -578,6 +610,11 @@ struct ContentView: View {
             .background {
                 RadialGradient(colors: [Color(red: 0.17, green: 0.18, blue: 0.32), ink],
                                center: .topTrailing, startRadius: 10, endRadius: 740)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                TutorDock(scope: tutorScope, cards: tutorCards, expanded: $tutorOpen, settings: tutorSettings)
+                    .id(TutorScopeIdentity(subject: selectedSubject, folderID: currentFolder?.id))
+                    .padding(18)
             }
         }
         .foregroundStyle(.white)
@@ -849,7 +886,7 @@ struct ContentView: View {
                         }
                     }
                 }
-            }.padding(32)
+            }.padding(32).padding(.bottom, 42)
         }
     }
 
@@ -1139,7 +1176,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.7"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.8"
         checking = true
         Task { @MainActor in
             defer { checking = false }

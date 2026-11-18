@@ -13,3 +13,7 @@ Im App-Menü unter **Blattkarten → Nach Updates suchen …** kannst du prüfen
 ## Bauen
 
 Mit den Xcode Command Line Tools erstellt `./build.sh` die App und `./make-dmg.sh` das DMG. Der Release-Workflow veröffentlicht das DMG für die Version aus der Info.plist.
+
+## KI-Lernchat
+
+Öffne ein Fach oder einen Ordner und klicke unten rechts auf **KI-Lernchat**. Der Chat verwendet passende Karteikarten aus dem geöffneten Bereich einschließlich seiner Unterordner. Unter **KI einrichten** kannst du ein auf deinem Mac laufendes Ollama-Modell wählen oder einen OpenAI-API-Schlüssel eingeben. Der Schlüssel bleibt bis zum Beenden der App im Arbeitsspeicher. Bei OpenAI werden die Frage und passende Kartentexte erst beim Senden an OpenAI übertragen.
