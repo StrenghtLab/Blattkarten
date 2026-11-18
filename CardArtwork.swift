@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum CardArtwork {
-    case series, parallel, ammeter, voltmeter, comparison, water, formula, unit, concept
+    case series, parallel, ammeter, voltmeter, comparison, water, formula, currentUnit, voltageUnit, resistanceUnit, conversion, unit, concept
 
     init(_ card: Card) {
         let text = card.question.lowercased()
@@ -9,7 +9,13 @@ enum CardArtwork {
         else if text.contains("amperemeter") { self = .ammeter }
         else if text.contains("voltmeter") { self = .voltmeter }
         else if text.contains("ohmsch") || text.contains("widerstand steigt") { self = .formula }
-        else if text.contains("umrechn") || text.contains("welche einheit") { self = .unit }
+        else if text.contains("umrechn") && card.answer.contains("kΩ") { self = .conversion }
+        else if text.contains("welche einheit") {
+            if text.contains("stromstärke") { self = .currentUnit }
+            else if text.contains("spannung") { self = .voltageUnit }
+            else if text.contains("widerstand") { self = .resistanceUnit }
+            else { self = .unit }
+        }
         else if text.contains("reihen-") && text.contains("parallel") { self = .comparison }
         else if text.contains("parallel") { self = .parallel }
         else if text.contains("reihenschaltung") { self = .series }
@@ -27,6 +33,17 @@ struct CardIllustration: View {
                 circuit(.series)
                 circuit(.parallel)
             }
+        } else if let units {
+            VStack(spacing: 4) {
+                ForEach(units.indices, id: \.self) { index in
+                    HStack(spacing: 9) {
+                        unitTile(units[index].0)
+                        Image(systemName: "arrow.right").font(.system(size: 10, weight: .semibold))
+                        unitTile(units[index].1)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if artwork == .water {
             water
         } else if [.series, .parallel, .ammeter, .voltmeter].contains(artwork) {
@@ -41,6 +58,24 @@ struct CardIllustration: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var units: [(String, String)]? {
+        switch artwork {
+        case .currentUnit: [("I", "A")]
+        case .voltageUnit: [("U", "V")]
+        case .resistanceUnit: [("R", "Ω")]
+        case .conversion: [("1.000 mA", "1 A"), ("1 kΩ", "1.000 Ω")]
+        default: nil
+        }
+    }
+
+    private func unitTile(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: artwork == .conversion ? 9 : 16, weight: .bold, design: .monospaced))
+            .padding(.horizontal, 8)
+            .padding(.vertical, artwork == .conversion ? 2 : 4)
+            .background(.foreground.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
     }
 
     private var symbol: String {

@@ -835,28 +835,13 @@ struct ContentView: View {
                     Text("Hier erscheinen deine Karten nach dem ersten Import.")
                         .foregroundStyle(soft).padding(.vertical, 12)
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 205), spacing: 14)], spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 470), spacing: 20)], spacing: 20) {
                         ForEach(Array(visibleCards.enumerated()), id: \.element.id) { index, card in
-                            Button { editing = card } label: {
-                                VStack(alignment: .leading, spacing: 13) {
-                                    HStack {
-                                        Text(card.worksheet ?? (card.subject == nil && !legacyTitle.isEmpty ? legacyTitle : "Lernkarte")).lineLimit(1).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(index.isMultiple(of: 2) ? mint : lilac)
-                                        Spacer()
-                                        Image(systemName: "pencil").foregroundStyle(soft)
-                                    }
-                                    CardIllustration(artwork: CardArtwork(card))
-                                        .frame(height: 55)
-                                        .foregroundStyle(index.isMultiple(of: 2) ? mint : lilac)
-                                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-                                        .accessibilityHidden(true)
-                                    Text(card.question).font(.headline).lineLimit(3)
-                                    Spacer(minLength: 0)
-                                }
-                                .padding(17).frame(height: 165)
-                                .background(panel, in: RoundedRectangle(cornerRadius: 16))
-                                .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.09)) }
-                            }
-                            .buttonStyle(.plain)
+                            PaperCardPair(
+                                card: card,
+                                source: card.worksheet ?? (card.subject == nil && !legacyTitle.isEmpty ? legacyTitle : nil),
+                                edit: { editing = card }
+                            )
                             .rotationEffect(.degrees(appeared || reduceMotion ? 0 : -8))
                             .offset(y: appeared || reduceMotion ? 0 : 52)
                             .opacity(appeared ? 1 : 0)
@@ -1019,22 +1004,13 @@ struct FlipCard: View, Animatable {
     var body: some View {
         let back = angle >= 90
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Label(back ? "Antwort" : "Frage", systemImage: back ? "checkmark.circle" : "questionmark.circle")
-                    .font(.subheadline.bold())
-                if back {
-                    CardIllustration(artwork: artwork).frame(maxWidth: 310).frame(height: 64)
-                }
-                Text(back ? answer : question).font(.system(size: 29, weight: .bold))
-                    .textSelection(.disabled)
-            }
-            .frame(maxWidth: .infinity, minHeight: 176, alignment: .leading)
-            .padding(28)
+            PaperCardFace(text: back ? answer : question, artwork: back ? artwork : nil, large: true)
         }
-        .frame(height: 244)
-        .foregroundStyle(ink)
-        .background(back ? mint : lilac, in: RoundedRectangle(cornerRadius: 22))
-        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: 304)
+        .background(PaperCardFace.paperColor(back: back), in: RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
         .rotation3DEffect(.degrees(reduceMotion ? 0 : angle - (back ? 180 : 0)), axis: (0, 1, 0), perspective: 0.45)
     }
 }
@@ -1163,7 +1139,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.6"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.7"
         checking = true
         Task { @MainActor in
             defer { checking = false }
