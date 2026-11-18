@@ -27,3 +27,5 @@ Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Un
 ### Antworten direkt in Blattkarten
 
 Wähle unter **KI einrichten** die **OpenAI API** oder ein lokales **Ollama**-Modell. Gib deine Frage im Blattkarten-Lernchat ein und klicke auf **Senden**. Frage, Antwort und Rückfragen bleiben in der nativen Chat-Ansicht von Blattkarten. Für das OpenAI-Modell brauchst du einen API-Schlüssel.
+
+Beim Üben kannst du deine Antwort eintippen und mit der Eingabetaste die Musterantwort anzeigen. Bewerte dich anschließend mit **Gewusst** oder **Nochmal**.

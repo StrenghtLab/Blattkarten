@@ -605,6 +605,8 @@ struct ContentView: View {
     @State private var known = 0
     @State private var missed: [Card] = []
     @State private var flipped = false
+    @State private var typedAnswer = ""
+    @FocusState private var typingPracticeAnswer: Bool
     @State private var busy = false
     @State private var camera = false
     @State private var editing: Card?
@@ -992,50 +994,81 @@ struct ContentView: View {
     }
 
     var practice: some View {
-        VStack(alignment: .leading, spacing: 23) {
-            Text("Üben · \(location)").font(.system(size: 39, weight: .bold))
-            if session.isEmpty {
-                Text("Füge diesem Fach zuerst Karten hinzu.").foregroundStyle(soft)
-                Button("Zur Sammlung") { page = "Sammlung" }.buttonStyle(Pill(tint: mint))
-            } else if cursor >= session.count {
-                VStack(alignment: .leading, spacing: 17) {
-                    Image(systemName: "checkmark.seal.fill").font(.system(size: 40)).foregroundStyle(mint)
-                    Text("Runde geschafft").font(.largeTitle.bold())
-                    Text("\(known) von \(session.count) gewusst").font(.title3).foregroundStyle(soft)
-                    HStack {
-                        if !missed.isEmpty {
-                            Button("\(missed.count) wiederholen") { begin(missed) }.buttonStyle(Pill(tint: mint))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 23) {
+                Text("Üben · \(location)").font(.system(size: 39, weight: .bold))
+                if session.isEmpty {
+                    Text("Füge diesem Fach zuerst Karten hinzu.").foregroundStyle(soft)
+                    Button("Zur Sammlung") { page = "Sammlung" }.buttonStyle(Pill(tint: mint))
+                } else if cursor >= session.count {
+                    VStack(alignment: .leading, spacing: 17) {
+                        Image(systemName: "checkmark.seal.fill").font(.system(size: 40)).foregroundStyle(mint)
+                        Text("Runde geschafft").font(.largeTitle.bold())
+                        Text("\(known) von \(session.count) gewusst").font(.title3).foregroundStyle(soft)
+                        HStack {
+                            if !missed.isEmpty {
+                                Button("\(missed.count) wiederholen") { begin(missed) }.buttonStyle(Pill(tint: mint))
+                            }
+                            Button("Alle neu mischen") { begin(practiceCards) }.buttonStyle(Pill())
                         }
-                        Button("Alle neu mischen") { begin(practiceCards) }.buttonStyle(Pill())
-                    }
-                }.padding(30).frame(maxWidth: .infinity, minHeight: 260, alignment: .leading)
-                    .background(panel, in: RoundedRectangle(cornerRadius: 22))
-            } else {
-                let card = session[cursor]
-                Text("Karte \(cursor + 1) von \(session.count)").font(.subheadline.bold()).foregroundStyle(soft)
-                ProgressView(value: Double(cursor), total: Double(session.count)).tint(mint)
-                Button {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { flipped.toggle() }
-                } label: {
-                    FlipCard(question: card.question, answer: card.answer, artwork: CardArtwork(card), angle: flipped ? 180 : 0, reduceMotion: reduceMotion)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(flipped ? card.answer : card.question)
-                .accessibilityHint("Dreht die Karte um")
-                .keyboardShortcut(.space, modifiers: [])
-                if flipped {
-                    HStack {
-                        Button("Nochmal") { advance(false) }.buttonStyle(Pill())
-                            .keyboardShortcut(.leftArrow, modifiers: [])
-                        Button("Gewusst") { advance(true) }.buttonStyle(Pill(tint: mint))
-                            .keyboardShortcut(.rightArrow, modifiers: [])
-                    }
+                    }.padding(30).frame(maxWidth: .infinity, minHeight: 260, alignment: .leading)
+                        .background(panel, in: RoundedRectangle(cornerRadius: 22))
                 } else {
-                    Text("Klicke auf die Karte oder drücke die Leertaste.").foregroundStyle(soft)
+                    let card = session[cursor]
+                    Text("Karte \(cursor + 1) von \(session.count)").font(.subheadline.bold()).foregroundStyle(soft)
+                    ProgressView(value: Double(cursor), total: Double(session.count)).tint(mint)
+                    Button {
+                        togglePracticeCard()
+                    } label: {
+                        FlipCard(question: card.question, answer: card.answer, artwork: CardArtwork(card), angle: flipped ? 180 : 0, reduceMotion: reduceMotion)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(flipped ? card.answer : card.question)
+                    .accessibilityHint("Dreht die Karte um")
+                    .keyboardShortcut(typingPracticeAnswer ? nil : KeyboardShortcut(.space, modifiers: []))
+                    if flipped {
+                        if !typedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Deine Antwort").font(.caption.bold()).foregroundStyle(mint)
+                                ScrollView {
+                                    Text(typedAnswer).textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .scrollBounceBehavior(.basedOnSize)
+                                .frame(maxHeight: 58)
+                            }
+                            .padding(10)
+                            .background(panel, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        HStack {
+                            Button("Nochmal") { advance(false) }.buttonStyle(Pill())
+                                .keyboardShortcut(.leftArrow, modifiers: [])
+                            Button("Gewusst") { advance(true) }.buttonStyle(Pill(tint: mint))
+                                .keyboardShortcut(.rightArrow, modifiers: [])
+                        }
+                    } else {
+                        HStack(spacing: 10) {
+                            TextField("Deine Antwort eingeben", text: $typedAnswer)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($typingPracticeAnswer)
+                                .onSubmit { togglePracticeCard() }
+                                .accessibilityHint("Mit der Eingabetaste die Musterantwort anzeigen")
+                            Button("Antwort anzeigen") { togglePracticeCard() }
+                                .buttonStyle(Pill(tint: mint))
+                        }
+                        Text("Mit der Eingabetaste vergleichen oder die Karte per Klick umdrehen.")
+                            .font(.caption).foregroundStyle(soft)
+                    }
                 }
             }
-            Spacer(minLength: 0)
-        }.padding(32).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(32).padding(.bottom, 42)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func togglePracticeCard() {
+        typingPracticeAnswer = false
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { flipped.toggle() }
     }
 
     func begin(_ deck: [Card]) {
@@ -1043,6 +1076,7 @@ struct ContentView: View {
         cursor = 0
         known = 0
         missed = []
+        typedAnswer = ""
         flipped = false
         page = "Üben"
     }
@@ -1055,6 +1089,7 @@ struct ContentView: View {
             cards[position].review = LearningProgress.after(cards[position].review, understood: understood, now: reviewClock)
             persist()
         }
+        typedAnswer = ""
         flipped = false
         cursor += 1
     }
@@ -1285,7 +1320,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.4"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.5"
         checking = true
         Task { @MainActor in
             defer { checking = false }
