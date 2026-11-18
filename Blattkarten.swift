@@ -495,6 +495,15 @@ let mint = Color(red: 0.56, green: 0.98, blue: 0.78)
 let lilac = Color(red: 0.72, green: 0.66, blue: 1)
 let soft = Color(red: 0.69, green: 0.74, blue: 0.83)
 
+private enum PracticeMode {
+    case typing, flip
+}
+
+private struct PracticeSetup: Identifiable {
+    let id = UUID()
+    let cards: [Card]
+}
+
 private struct TutorScopeIdentity: Hashable {
     let subject: String
     let folderID: UUID?
@@ -606,6 +615,8 @@ struct ContentView: View {
     @State private var missed: [Card] = []
     @State private var flipped = false
     @State private var typedAnswer = ""
+    @State private var practiceMode: PracticeMode = .flip
+    @State private var practiceSetup: PracticeSetup?
     @FocusState private var typingPracticeAnswer: Bool
     @State private var busy = false
     @State private var camera = false
@@ -685,6 +696,31 @@ struct ContentView: View {
             TextField("Ordnername", text: $newFolder)
             Button("Abbrechen", role: .cancel) {}
             Button("Hinzufügen") { addFolder() }.disabled(!canAddFolder)
+        }
+        .sheet(item: $practiceSetup) { setup in
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Wie möchtest du üben?").font(.title2.bold())
+                Button {
+                    begin(setup.cards, mode: .typing)
+                } label: {
+                    Label("Antworten eintippen", systemImage: "keyboard")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(Pill(tint: mint))
+                Button {
+                    begin(setup.cards, mode: .flip)
+                } label: {
+                    Label("Karten umdrehen", systemImage: "rectangle.on.rectangle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(Pill())
+                HStack {
+                    Spacer()
+                    Button("Abbrechen") { practiceSetup = nil }.keyboardShortcut(.cancelAction)
+                }
+            }
+            .padding(24)
+            .frame(width: 350)
         }
         .sheet(isPresented: $camera) {
             CameraSheet { data in
@@ -865,8 +901,11 @@ struct ContentView: View {
 
     func navigation(_ title: String, _ icon: String) -> some View {
         Button {
-            if title == "Üben", session.isEmpty, !practiceCards.isEmpty { begin(dueCards.isEmpty ? practiceCards : dueCards) }
-            page = title
+            if title == "Üben", session.isEmpty, !practiceCards.isEmpty {
+                choosePracticeMode(dueCards.isEmpty ? practiceCards : dueCards)
+            } else {
+                page = title
+            }
         } label: {
             Label(title, systemImage: icon)
                 .font(.system(size: 14, weight: .semibold))
@@ -911,10 +950,10 @@ struct ContentView: View {
                     }
                     if !practiceCards.isEmpty {
                         Menu {
-                            Button("Fällige Karten (\(dueCards.count))") { begin(dueCards) }.disabled(dueCards.isEmpty)
-                            Button("Alle Karten üben") { begin(practiceCards) }
+                            Button("Fällige Karten (\(dueCards.count))") { choosePracticeMode(dueCards) }.disabled(dueCards.isEmpty)
+                            Button("Alle Karten üben") { choosePracticeMode(practiceCards) }
                             if searchActive {
-                                Button("Suchtreffer üben") { begin(displayedCards) }.disabled(displayedCards.isEmpty)
+                                Button("Suchtreffer üben") { choosePracticeMode(displayedCards) }.disabled(displayedCards.isEmpty)
                             }
                         } label: {
                             Label("Üben", systemImage: "bolt.fill")
@@ -1007,9 +1046,9 @@ struct ContentView: View {
                         Text("\(known) von \(session.count) gewusst").font(.title3).foregroundStyle(soft)
                         HStack {
                             if !missed.isEmpty {
-                                Button("\(missed.count) wiederholen") { begin(missed) }.buttonStyle(Pill(tint: mint))
+                                Button("\(missed.count) wiederholen") { choosePracticeMode(missed) }.buttonStyle(Pill(tint: mint))
                             }
-                            Button("Alle neu mischen") { begin(practiceCards) }.buttonStyle(Pill())
+                            Button("Alle neu mischen") { choosePracticeMode(practiceCards) }.buttonStyle(Pill())
                         }
                     }.padding(30).frame(maxWidth: .infinity, minHeight: 260, alignment: .leading)
                         .background(panel, in: RoundedRectangle(cornerRadius: 22))
@@ -1046,7 +1085,7 @@ struct ContentView: View {
                             Button("Gewusst") { advance(true) }.buttonStyle(Pill(tint: mint))
                                 .keyboardShortcut(.rightArrow, modifiers: [])
                         }
-                    } else {
+                    } else if practiceMode == .typing {
                         HStack(spacing: 10) {
                             TextField("Deine Antwort eingeben", text: $typedAnswer)
                                 .textFieldStyle(.roundedBorder)
@@ -1057,6 +1096,9 @@ struct ContentView: View {
                                 .buttonStyle(Pill(tint: mint))
                         }
                         Text("Mit der Eingabetaste vergleichen oder die Karte per Klick umdrehen.")
+                            .font(.caption).foregroundStyle(soft)
+                    } else {
+                        Text("Klicke auf die Karte oder drücke die Leertaste, um die Antwort zu sehen.")
                             .font(.caption).foregroundStyle(soft)
                     }
                 }
@@ -1071,7 +1113,14 @@ struct ContentView: View {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { flipped.toggle() }
     }
 
-    func begin(_ deck: [Card]) {
+    private func choosePracticeMode(_ deck: [Card]) {
+        guard !deck.isEmpty else { return }
+        practiceSetup = PracticeSetup(cards: deck)
+    }
+
+    private func begin(_ deck: [Card], mode: PracticeMode) {
+        practiceMode = mode
+        practiceSetup = nil
         session = deck.shuffled()
         cursor = 0
         known = 0
@@ -1320,7 +1369,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.5"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.6"
         checking = true
         Task { @MainActor in
             defer { checking = false }
