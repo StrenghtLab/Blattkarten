@@ -29,3 +29,7 @@ Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Un
 Wähle unter **KI einrichten** die **OpenAI API** oder ein lokales **Ollama**-Modell. Gib deine Frage im Blattkarten-Lernchat ein und klicke auf **Senden**. Frage, Antwort und Rückfragen bleiben in der nativen Chat-Ansicht von Blattkarten. Für das OpenAI-Modell brauchst du einen API-Schlüssel.
 
 Vor jeder Übungsrunde wählst du zwischen **Antworten eintippen** und **Karten umdrehen**. Im Tippmodus zeigt die Eingabetaste die Musterantwort. Bewerte dich anschließend mit **Gewusst** oder **Nochmal**.
+
+## Lernflamme
+
+Bewertete Karten und erfolgreiche Arbeitsblattimporte zählen als Lernaktivität. Neue Streak-Rekorde, je fünf bewertete Karten und jeder erfolgreiche Import schalten weiteren Kleidungsstil frei. In der Kleiderauswahl gibt es 365 Kombinationen. Auf dem Schreibtisch findest du unter **Widgets bearbeiten → Blattkarten** das Widget **Lernflamme**.

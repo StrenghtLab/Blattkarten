@@ -517,6 +517,9 @@ struct ContentView: View {
     @State private var newSubject = ""
     @State private var addingSubject = false
     @State private var tutorOpen = false
+    @State private var showingPet = false
+    @State private var pet = StreakPet()
+    @AppStorage("worksheet.streakPet.v1") private var savedPet = Data()
     @State private var nativeTutor: TutorSessionRequest?
     @StateObject private var tutorSettings = TutorSettings()
     @AppStorage("worksheet.folders.v1") private var savedFolders = Data()
@@ -636,6 +639,18 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 840, minHeight: 620)
+        .onOpenURL { url in
+            guard url.scheme == "blattkarten", url.host == "lernflamme" else { return }
+            nativeTutor = nil
+            showingPet = true
+        }
+        .sheet(isPresented: $showingPet) {
+            PetCloset(pet: pet) { index in
+                guard index < pet.unlocked else { return }
+                pet.outfit = index
+                savePet()
+            }
+        }
     }
 
     private var workspace: some View {
@@ -662,6 +677,8 @@ struct ContentView: View {
         .frame(minWidth: 840, minHeight: 620)
         .onAppear {
             if let decoded = try? JSONDecoder().decode([Card].self, from: saved) { cards = decoded }
+            if let decoded = try? JSONDecoder().decode(StreakPet.self, from: savedPet) { pet = decoded }
+            pet.publish()
             if !subjects.contains(selectedSubject) { selectedSubject = "Allgemein" }
             appeared = true
         }
@@ -798,6 +815,21 @@ struct ContentView: View {
                     }
                 }
             }
+            Button { showingPet = true } label: {
+                HStack(spacing: 6) {
+                    FlamePet(outfit: Outfit(pet.outfit)).frame(width: 42, height: 42)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Lernflamme").font(.caption.bold()).foregroundStyle(.white)
+                        let streak = pet.streak(at: reviewClock)
+                        Text("\(streak) \(streak == 1 ? "Lerntag" : "Lerntage")").font(.caption2).foregroundStyle(mint)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(5)
+                .background(panel, in: RoundedRectangle(cornerRadius: 9))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Öffnet den Kleiderschrank")
             Label("Lokal auf diesem Mac", systemImage: "lock")
                 .font(.system(size: 11)).foregroundStyle(soft)
         }
@@ -1137,10 +1169,21 @@ struct ContentView: View {
             reviewClock = .now
             cards[position].review = LearningProgress.after(cards[position].review, understood: understood, now: reviewClock)
             persist()
+            rewardStudy(worksheet: false)
         }
         typedAnswer = ""
         flipped = false
         cursor += 1
+    }
+
+    private func savePet() {
+        if let data = try? JSONEncoder().encode(pet) { savedPet = data }
+        pet.publish()
+    }
+
+    private func rewardStudy(worksheet: Bool) {
+        pet.activity(worksheet: worksheet)
+        savePet()
     }
 
     func persist() { if let encoded = try? JSONEncoder().encode(cards) { saved = encoded } }
@@ -1212,6 +1255,7 @@ struct ContentView: View {
                     Card(id: $0.id, question: $0.question, answer: $0.answer, subject: importSubject, worksheet: title, folderID: importFolderID)
                 } + cards
                 persist()
+                rewardStudy(worksheet: true)
                 if !reduceMotion { try? await Task.sleep(for: .milliseconds(90)) }
                 appeared = true
             } catch {
@@ -1369,7 +1413,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.6"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.7"
         checking = true
         Task { @MainActor in
             defer { checking = false }
