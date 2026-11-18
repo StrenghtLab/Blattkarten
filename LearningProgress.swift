@@ -15,6 +15,20 @@ struct LearningProgress: Codable {
 }
 
 extension Card {
+    static func generated(question: String, answer: String) -> Card? {
+        let prompt = question.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let reply = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard prompt.hasSuffix("?"), (7...220).contains(prompt.count),
+              !reply.isEmpty, reply.count <= 520,
+              reply.range(of: #"^(?:\.{2,}|…|[-–—]+|_+|unbekannt|keine angabe|keine antwort(?: vorhanden)?)[.!]?$"#,
+                          options: [.caseInsensitive, .regularExpression]) == nil,
+              prompt.dropLast().caseInsensitiveCompare(reply) != .orderedSame else { return nil }
+        let capitalizable = reply.range(of: #"^(ein(?:e[nmrs]?)?|der|die|das|den|dem|durch|in|an|auf|bei|mit|für|von|sie|er|es)\s"#,
+                                           options: .regularExpression) != nil
+        let cleanAnswer = capitalizable ? reply.prefix(1).uppercased() + reply.dropFirst() : reply
+        return Card(question: prompt, answer: cleanAnswer)
+    }
+
     func isDue(at time: Date) -> Bool { review?.dueAt ?? .distantPast <= time }
 
     func matches(_ query: String) -> Bool {

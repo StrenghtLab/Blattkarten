@@ -60,7 +60,7 @@ struct PaperCardFace: View {
 
             Rectangle().fill(accent.opacity(0.30)).frame(height: 1)
 
-            if let artwork {
+            if let artwork, artwork != .concept {
                 CardIllustration(artwork: artwork)
                     .frame(maxWidth: 330)
                     .frame(height: large ? 70 : 52)
@@ -71,8 +71,8 @@ struct PaperCardFace: View {
             }
 
             Text(text)
-                .font(.system(size: large ? (back ? 23 : 28) : (back ? 14 : 16),
-                              weight: back ? .regular : .semibold))
+                .font(.system(size: large ? (back ? 23 : 28) : (back && text.count > 110 ? 14 : 16),
+                              weight: back && text.count > 110 ? .regular : .semibold))
                 .foregroundStyle(ink)
                 .fixedSize(horizontal: false, vertical: true)
 

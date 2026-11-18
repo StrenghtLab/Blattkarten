@@ -1,16 +1,22 @@
 import SwiftUI
 
 enum CardArtwork {
-    case series, parallel, ammeter, voltmeter, comparison, water, formula, currentUnit, voltageUnit, resistanceUnit, conversion, unit, concept
+    case series, parallel, ammeter, voltmeter, comparison, water, formula, currentFormula, resistanceFormula, currentUnit, voltageUnit, resistanceUnit, conversion, currentConversion, resistanceConversion, unit, concept
 
     init(_ card: Card) {
         let text = card.question.lowercased()
         if text.contains("wassermodell") || text.contains("wasserrad") { self = .water }
         else if text.contains("amperemeter") { self = .ammeter }
         else if text.contains("voltmeter") { self = .voltmeter }
-        else if text.contains("ohmsch") || text.contains("widerstand steigt") { self = .formula }
-        else if text.contains("umrechn") && card.answer.contains("kΩ") { self = .conversion }
-        else if text.contains("welche einheit") {
+        else if text.contains("ohmsch") || text.contains("widerstand steigt") {
+            if card.answer.hasPrefix("I =") { self = .currentFormula }
+            else if card.answer.hasPrefix("R =") { self = .resistanceFormula }
+            else { self = .formula }
+        }
+        else if text.contains("milliampere") && text.contains("um?") && text.contains("kiloohm") { self = .conversion }
+        else if text.contains("milliampere") && text.contains("um?") { self = .currentConversion }
+        else if text.contains("kiloohm") && text.contains("um?") { self = .resistanceConversion }
+        else if text.contains("welche einheit") || text.contains("welcher einheit") {
             if text.contains("stromstärke") { self = .currentUnit }
             else if text.contains("spannung") { self = .voltageUnit }
             else if text.contains("widerstand") { self = .resistanceUnit }
@@ -52,8 +58,8 @@ struct CardIllustration: View {
             HStack(spacing: 9) {
                 Image(systemName: symbol)
                     .font(.system(size: 24, weight: .medium))
-                if reveal && artwork == .formula {
-                    Text("U = R · I").font(.system(.headline, design: .monospaced))
+                if reveal, let formula {
+                    Text(formula).font(.system(.headline, design: .monospaced))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -66,6 +72,8 @@ struct CardIllustration: View {
         case .voltageUnit: [("U", "V")]
         case .resistanceUnit: [("R", "Ω")]
         case .conversion: [("1.000 mA", "1 A"), ("1 kΩ", "1.000 Ω")]
+        case .currentConversion: [("1.000 mA", "1 A")]
+        case .resistanceConversion: [("1 kΩ", "1.000 Ω")]
         default: nil
         }
     }
@@ -78,10 +86,19 @@ struct CardIllustration: View {
             .background(.foreground.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
     }
 
+    private var formula: String? {
+        switch artwork {
+        case .formula: "U = R · I"
+        case .currentFormula: "I = U / R"
+        case .resistanceFormula: "R = U / I"
+        default: nil
+        }
+    }
+
     private var symbol: String {
         switch artwork {
         case .water: "water.waves"
-        case .formula: "function"
+        case .formula, .currentFormula, .resistanceFormula: "function"
         case .unit: "ruler"
         default: "book.closed"
         }

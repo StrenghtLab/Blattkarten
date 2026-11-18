@@ -152,19 +152,22 @@ enum Worksheet {
                unitRows.allSatisfy({ has(#"^\p{L}+\s*\([^)]+\)$"#, in: $0) }) {
                 for index in labels.indices {
                     let label = labels[index]
-                    let unit = unitRows[index]
+                    let meaning = meanings[index]
                     let answer: String
+                    var unit = unitRows[index]
                     if has(#"^Stromstärke\s+[I1l]$"#, in: label), has("Ladung.*Zeit", in: meanings[index]) {
-                        answer = "Elektrische Ladung, die pro Zeit durch eine Stelle fließt. Symbol: I. Einheit: Ampere (A)."
+                        answer = "Elektrische Ladung, die pro Zeit durch eine Stelle fließt."
                     } else if has(#"^Spannung\s+U$"#, in: label), has("Energieunterschied.*Ladung", in: meanings[index]) {
-                        answer = "Energieunterschied pro Ladung zwischen zwei Stellen. Symbol: U. Einheit: Volt (V)."
+                        answer = "Energieunterschied pro Ladung zwischen zwei Stellen."
                     } else if has(#"^Widerstand\s+R$"#, in: label), has("Stromfluss hemmt", in: meanings[index]) {
-                        answer = "Gibt an, wie stark ein Bauteil den Stromfluss hemmt. Symbol: R. Einheit: Ohm (Ω)."
+                        answer = "Er gibt an, wie stark ein Bauteil den Stromfluss hemmt."
+                        unit = "Ohm (Ω)"
                     } else {
-                        answer = meanings[index] + "\nEinheit: " + unit
+                        answer = meaning
                     }
-                    let term = label.replacingOccurrences(of: #"\s+[A-Za-z]$"#, with: "", options: .regularExpression)
-                    add("Was beschreibt die Größe „\(term)“ und welche Einheit hat sie?", answer)
+                    let term = label.replacingOccurrences(of: #"\s+[A-Za-z1]$"#, with: "", options: .regularExpression)
+                    add("Was beschreibt die Größe „\(term)“?", answer)
+                    add("In welcher Einheit misst man „\(term)“?", unit)
                 }
             }
         }
@@ -173,8 +176,8 @@ enum Worksheet {
                 add("Wie schließt du ein Amperemeter an?", "In Reihe in den Stromweg, dessen Stromstärke du messen willst.")
             }
             if has(#"vor der Verzweigung[\s\S]{0,25}Gesamtstrom"#), has("im oberen Zweig misst") {
-                add("Wo misst du in einer Parallelschaltung den Gesamtstrom und wo den Zweigstrom?",
-                    "Vor der Verzweigung misst du den Gesamtstrom. Im jeweiligen Zweig misst du den Strom durch diesen Zweig.")
+                add("Wo misst du den Gesamtstrom einer Parallelschaltung?", "Vor der Verzweigung.")
+                add("Wo misst du den Zweigstrom einer Parallelschaltung?", "Im jeweiligen Zweig.")
             }
             if has(#"Voltmeter\s+V\s+parallel[\s\S]{0,85}anschließen"#) {
                 add("Wie schließt du ein Voltmeter an?", "Parallel zu den beiden Anschlüssen des Bauteils. Es misst die Spannung zwischen diesen Punkten.")
@@ -184,12 +187,12 @@ enum Worksheet {
                     "Verfolge die Leitungen. In Reihe durchläuft derselbe Strom die Bauteile nacheinander. Parallel liegen die Bauteile zwischen denselben zwei Anschlussknoten.")
             }
             if has("Wasserkreislauf"), has("Spannungsquelle"), has("Höhenunterschied"), has("Druckunterschied") {
-                add("Wofür stehen Pumpe und Höhen- oder Druckunterschied im Wassermodell?",
-                    "Die Pumpe entspricht der Spannungsquelle, zum Beispiel einer Batterie. Der Höhen- oder Druckunterschied entspricht der Spannung zwischen zwei Stellen.")
+                add("Wofür steht die Pumpe im Wassermodell?", "Für die Spannungsquelle, zum Beispiel eine Batterie.")
+                add("Wofür steht der Höhen- oder Druckunterschied im Wassermodell?", "Für die Spannung zwischen zwei Stellen.")
             }
             if has("Wassermenge pro Zeit"), has("Wasserrad"), has("Bauteil mit Widerstand") {
-                add("Wofür stehen Wassermenge pro Zeit und Wasserrad im Stromkreis?",
-                    "Die Wassermenge pro Zeit entspricht der Stromstärke. Das Wasserrad, das den Fluss hemmt, entspricht einem Bauteil mit Widerstand.")
+                add("Wofür steht die Wassermenge pro Zeit im Wassermodell?", "Für die Stromstärke.")
+                add("Wofür steht das bremsende Wasserrad im Wassermodell?", "Für ein Bauteil mit Widerstand.")
             }
             if has("dieselbe Wassermenge pro Zeit"), has(#"Höhenunterschied verteilt sich"#) {
                 add("Was zeigt das Wassermodell bei einer Reihenschaltung?",
@@ -209,8 +212,9 @@ enum Worksheet {
         let compact = text.replacingOccurrences(of: #"[^\S\n]+"#, with: "", options: .regularExpression)
         if has(#"R=U/[Il1]"#, in: compact), has(#"[Il1]=U/R"#, in: compact),
            has(#"U=R[·•⋅×*][Il1]"#, in: compact) {
-            add("Wie berechnest du Spannung, Stromstärke und Widerstand mit dem Ohmschen Gesetz?",
-                "U = R · I,  I = U / R,  R = U / I.")
+            add("Wie berechnest du die Spannung mit dem Ohmschen Gesetz?", "U = R · I")
+            add("Wie berechnest du die Stromstärke mit dem Ohmschen Gesetz?", "I = U / R")
+            add("Wie berechnest du den Widerstand mit dem Ohmschen Gesetz?", "R = U / I")
         }
         if has(#"(unveränderter|konstanter) Spannung"#), has("größerer Widerstand"), has(#"kleinere\s+Stromstärke"#) {
             add("Was passiert mit der Stromstärke, wenn bei gleicher Spannung der Widerstand steigt?",
@@ -238,8 +242,8 @@ enum Worksheet {
                 "Rges = (R₁ · R₂) / (R₁ + R₂).")
         }
         if has(#"1A=1[.,]?000mA"#, in: compact), has(#"1k[ΩQOD]=1[.,]?000"#, in: compact) {
-            add("Wie rechnest du Milliampere in Ampere und Kiloohm in Ohm um?",
-                "mA → A: durch 1.000 teilen.\nkΩ → Ω: mit 1.000 multiplizieren.")
+            add("Wie rechnest du Milliampere in Ampere um?", "Durch 1.000 teilen.")
+            add("Wie rechnest du Kiloohm in Ohm um?", "Mit 1.000 multiplizieren.")
         }
         return cards
     }
@@ -268,33 +272,57 @@ enum Worksheet {
         var paragraph = ""
 
         func add(_ question: String, _ answer: String, priority: Int) {
-            let clean = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !clean.isEmpty, clean.count <= 520 else { return }
-            candidates.append(Candidate(card: Card(question: question, answer: clean), priority: priority, topic: topic))
+            guard let card = Card.generated(question: question, answer: answer) else { return }
+            candidates.append(Candidate(card: card, priority: priority, topic: topic))
+        }
+
+        func subjectInQuestion(_ value: String) -> String {
+            let subject = value.trimmingCharacters(in: .whitespaces)
+            if match(#"^(der|die|das|ein|eine)\s+"#, in: subject) != nil {
+                return subject.prefix(1).lowercased() + subject.dropFirst()
+            }
+            return subject
         }
 
         func summarize(_ sentence: String) {
             let fact = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !fact.isEmpty, !fact.hasSuffix("?") else { return }
-            if let parts = match(#"^(.{2,65}?)\s+(ist|sind|bezeichnet|bedeutet)\s+(.{6,})$"#, in: fact) {
+            if let parts = match(#"^Im Jahr (\d{3,4}) (.{12,})$"#, in: fact) {
+                let event = parts[1].trimmingCharacters(in: CharacterSet(charactersIn: ".! "))
+                add("In welchem Jahr geschah Folgendes: \(event)?", parts[0], priority: 8)
+            } else if let parts = match(#"^(.{6,}?)(?:,)?\s+(weil|denn)\s+(.{5,})$"#, in: fact) {
+                let claim = parts[0].trimmingCharacters(in: CharacterSet(charactersIn: ", "))
+                add("Warum gilt „\(claim)“?", parts[2], priority: 9)
+            } else if let parts = match(#"^(.{2,65}?)\s+(ist|sind|bezeichnet|bedeutet)\s+(.{6,})$"#, in: fact) {
                 let plural = parts[1].lowercased() == "sind"
-                add("\(plural ? "Was sind" : "Was ist") \(parts[0])?", parts[2], priority: 8)
-            } else if let parts = match(#"^(.{6,}?)(?:,)?\s+(weil|da|denn)\s+(.{5,})$"#, in: fact) {
-                add("Warum gilt die Aussage „\(parts[0])“?", parts[2], priority: 8)
+                let subject = subjectInQuestion(parts[0])
+                add("\(plural ? "Was sind" : "Was ist") \(subject)?", parts[2], priority: 8)
             } else if let parts = match(#"^(.{2,55}?)\s+(besteht|bestehen)\s+aus\s+(.{5,})$"#, in: fact) {
-                add("Woraus \(parts[1].lowercased()) \(parts[0])?", parts[2], priority: 8)
+                add("Woraus \(parts[1].lowercased()) \(subjectInQuestion(parts[0]))?", parts[2], priority: 8)
             } else if let parts = match(#"^(.{2,55}?)\s+(entsteht|entstehen)\s+(.{5,})$"#, in: fact) {
-                add("Wie \(parts[1].lowercased()) \(parts[0])?", parts[2], priority: 8)
+                let circumstance = parts[2].lowercased()
+                let cue = circumstance.hasPrefix("bei ") || circumstance.hasPrefix("wenn ") ? "Wann" :
+                    (circumstance.hasPrefix("in ") || circumstance.hasPrefix("an ") ? "Wo" : "Wie")
+                add("\(cue) \(parts[1].lowercased()) \(subjectInQuestion(parts[0]))?", parts[2], priority: 8)
             } else if let parts = match(#"^(.{2,55}?)\s+(wird|werden)\s+((?:durch|in|aus|bei|mit|von)\s+.{6,})$"#, in: fact) {
-                add("Was passiert mit „\(parts[0])“?", parts[1] + " " + parts[2], priority: 7)
-            } else if let parts = match(#"^(.{2,55}?)\s+(braucht|brauchen|benötigt|benötigen|enthält|enthalten|produziert|produzieren|speichert|speichern|verursacht|verursachen|schützt|schützen|transportiert|transportieren)\s+(.{4,})$"#, in: fact) {
-                let subject = parts[0].prefix(1).lowercased() + parts[0].dropFirst()
-                let startsWithArticle = match(#"^(der|die|das|ein|eine)\s+"#, in: parts[0]) != nil
-                add("Was \(parts[1].lowercased()) \(startsWithArticle ? subject : parts[0])?", parts[2], priority: 7)
-            } else if !topic.isEmpty, fact.split(whereSeparator: \.isWhitespace).count >= 5 {
-                add("Was sollte man über „\(topic)“ wissen?", fact, priority: 3)
-            } else if let parts = match(#"^((?:(?:der|die|das|ein|eine)\s+)?[^\s,]+)\s+(.{15,})$"#, in: fact) {
-                add("Was sagt das Blatt über „\(parts[0])“?", fact, priority: 2)
+                let auxiliary = parts[1].lowercased()
+                let complement = parts[2].trimmingCharacters(in: .whitespacesAndNewlines)
+                let subject = subjectInQuestion(parts[0])
+                if let location = match(#"^((?:in|an|auf|unter|über)\s+.+?)\s+(gespeichert|gebildet|hergestellt|abgebaut)\.?$"#, in: complement) {
+                    add("Wo \(auxiliary) \(subject) \(location[1])?", location[0], priority: 8)
+                } else {
+                    add("Was passiert mit „\(parts[0])“?", parts[1] + " " + complement, priority: 6)
+                }
+            } else if let parts = match(#"^(.{2,55}?)\s+(braucht|brauchen|benötigt|benötigen|enthält|enthalten|produziert|produzieren|speichert|speichern|verursacht|verursachen|schützt|schützen|transportiert|transportieren|umfasst|umfassen|misst|messen|liefert|liefern|verbindet|verbinden|nutzt|nutzen|nimmt|nehmen|gibt|geben)\s+(.{4,})$"#, in: fact) {
+                let subject = subjectInQuestion(parts[0])
+                let verb = parts[1].lowercased()
+                let complement = parts[2]
+                if let separable = match(#"^(.+?)\s+(auf|ab|weiter|frei)\.?$"#, in: complement),
+                   ["nimmt", "nehmen", "gibt", "geben"].contains(verb) {
+                    add("Was \(verb) \(subject) \(separable[1])?", separable[0], priority: 7)
+                } else if !["nimmt", "nehmen", "gibt", "geben"].contains(verb) {
+                    add("Was \(verb) \(subject)?", complement, priority: 7)
+                }
             }
         }
 
@@ -335,7 +363,7 @@ enum Worksheet {
             if !line.hasSuffix("."), !line.hasSuffix("!"),
                line.split(whereSeparator: \.isWhitespace).count <= 5,
                line.count <= 50,
-               match(#"\b(?:ist|sind|hat|haben|wird|werden|entsteht|besteht)\b"#, in: line) == nil {
+               match(#"\b(?:ist|sind|hat|haben|wird|werden|entsteht|besteht|bezeichnet|bedeutet|braucht|brauchen|benötigt|benötigen|enthält|enthalten|misst|messen|nutzt|nutzen|nimmt|nehmen|gibt|geben)\b"#, in: line) == nil {
                 flush()
                 topic = line.trimmingCharacters(in: CharacterSet(charactersIn: ":"))
                 continue
@@ -1490,7 +1518,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.11"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.12"
         checking = true
         Task { @MainActor in
             defer { checking = false }
