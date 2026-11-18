@@ -519,6 +519,8 @@ struct ContentView: View {
     @State private var tutorOpen = false
     @State private var showingPet = false
     @State private var pet = StreakPet()
+    @StateObject private var desktopFlame = FlameDesktop()
+    @AppStorage("worksheet.flameOnDesktop.v1") private var flameOnDesktop = false
     @AppStorage("worksheet.streakPet.v1") private var savedPet = Data()
     @State private var nativeTutor: TutorSessionRequest?
     @StateObject private var tutorSettings = TutorSettings()
@@ -645,7 +647,7 @@ struct ContentView: View {
             showingPet = true
         }
         .sheet(isPresented: $showingPet) {
-            PetCloset(pet: pet) { index in
+            PetCloset(pet: pet, desktopVisible: $flameOnDesktop) { index in
                 guard index < pet.unlocked else { return }
                 pet.outfit = index
                 savePet()
@@ -679,10 +681,15 @@ struct ContentView: View {
             if let decoded = try? JSONDecoder().decode([Card].self, from: saved) { cards = decoded }
             if let decoded = try? JSONDecoder().decode(StreakPet.self, from: savedPet) { pet = decoded }
             pet.publish()
+            refreshDesktopFlame()
             if !subjects.contains(selectedSubject) { selectedSubject = "Allgemein" }
             appeared = true
         }
-        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { reviewClock = $0 }
+        .onChange(of: flameOnDesktop) { refreshDesktopFlame() }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) {
+            reviewClock = $0
+            desktopFlame.refreshTime($0)
+        }
         .onChange(of: selectedSubject) {
             currentFolderID = nil
             search = ""
@@ -1176,9 +1183,14 @@ struct ContentView: View {
         cursor += 1
     }
 
+    private func refreshDesktopFlame() {
+        desktopFlame.update(pet: pet, visible: flameOnDesktop) { flameOnDesktop = false }
+    }
+
     private func savePet() {
         if let data = try? JSONEncoder().encode(pet) { savedPet = data }
         pet.publish()
+        refreshDesktopFlame()
     }
 
     private func rewardStudy(worksheet: Bool) {
@@ -1413,7 +1425,7 @@ struct EditCard: View {
     }
 
     private func checkForUpdate() {
-        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.8"
+        let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.9"
         checking = true
         Task { @MainActor in
             defer { checking = false }

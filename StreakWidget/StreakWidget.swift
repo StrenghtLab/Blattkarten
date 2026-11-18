@@ -58,7 +58,11 @@ struct FlameWidgetView: View {
     }
 }
 
-@main struct StreakWidget: Widget {
+@main struct StreakWidgetBundle: WidgetBundle {
+    var body: some Widget { StreakWidget() }
+}
+
+struct StreakWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: StreakPet.widgetKind, provider: FlameTimeline()) { entry in
             FlameWidgetView(entry: entry)

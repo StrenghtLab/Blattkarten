@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PetCloset: View {
     let pet: StreakPet
+    @Binding var desktopVisible: Bool
     let choose: (Int) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -49,8 +50,7 @@ struct PetCloset: View {
                 }
             }
             HStack {
-                Text("Widget hinzufügen: Schreibtisch → Widgets bearbeiten → Blattkarten")
-                    .font(.caption).foregroundStyle(soft)
+                Toggle("Flamme auf dem Schreibtisch anzeigen", isOn: $desktopVisible)
                 Spacer()
                 Button("Fertig") { dismiss() }.keyboardShortcut(.defaultAction)
             }
