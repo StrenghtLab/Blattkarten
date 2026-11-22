@@ -1,39 +1,48 @@
-# Blattkarten
+<div align="center">
+  <img src="./docs/images/blattkarten.png" width="88" height="88" alt="Blattkarten-Logo">
+  <h1>Blattkarten</h1>
+  <p>Aus Fotos, PDFs und Notizen werden Karteikarten für deinen Mac.</p>
+  <p><strong><a href="https://github.com/StrenghtLab/Blattkarten/releases/latest">↓ Blattkarten herunterladen</a></strong> · <a href="#was-blattkarten-kann">Funktionen</a> · <a href="#installation">Installation</a></p>
+  <p><sub>macOS 13 Ventura oder neuer · Intel und Apple Silicon</sub></p>
+  <img src="./docs/images/karteikarten.png" width="560" alt="Blattkarten mit Frage und Antwort nebeneinander. Auf den Rückseiten stehen beschriftete Skizzen einer Zelle, einer Parabel und eines Wassermoleküls.">
+</div>
 
-Blattkarten ist eine native macOS-App, die aus Arbeitsblättern Frage-Antwort-Karten zum Üben erstellt. Sie liest Bilder und PDFs ein und kann bei vorhandener Kamerafreigabe auch ein Arbeitsblatt fotografieren. Texterkennung und Kartenerstellung laufen auf dem Mac.
+## Was Blattkarten kann
 
-In der Sammlung siehst du Vorder- und Rückseite nebeneinander. Beim Üben wird die Karte umgedreht und zeigt die Antwort mit einer passenden Illustration. In der Seitenleiste lassen sich Fächer auswählen und eigene Fächer anlegen. Mit **+** neben dem Fach- oder Ordnernamen legst du Ordner und Unterordner an. Karten aus einem Import werden im gerade geöffneten Fach oder Ordner gespeichert. Über **Drucken** lassen sich das aktuelle Fach oder alle Fächer als faltbare A4-Karten ausgeben.
+| Erstellen | Organisieren | Lernen |
+| --- | --- | --- |
+| Fotografiere ein Arbeitsblatt mit der Mac-Kamera, öffne Bilder oder PDFs oder füge Lerntext ein. Das KI-Studio verarbeitet mehrere Dateien und bis zu 60.000 Zeichen. | Blattkarten schlägt ein Fach vor. Du kannst die Auswahl ändern und Karten in eigenen Fächern und verschachtelten Ordnern ablegen. | Drehe Karten um oder tippe deine Antwort ein. Fällige und schwierige Karten kommen zur Wiederholung zurück. |
+
+- **Karten prüfen.** Korrigiere den erkannten Text, klappe Belegstellen auf und wähle aus, welche Karten du speicherst. Passende Rückseiten zeigen Fachskizzen und kurze Erklärungen.
+- **Im Stoff nachschlagen.** Suche nach Fragen, Antworten und Dateinamen oder frage den KI-Lernchat nach dem Stoff im geöffneten Fach oder Ordner.
+- **Offline arbeiten.** Texterkennung und Schnellmodus laufen auf dem Mac. Für KI-Generierung und Lernchat kannst du Ollama lokal verwenden oder OpenAI einrichten.
+- **Auf Papier lernen.** Drucke einen Ordner, ein Fach oder die gesamte Sammlung als faltbare A4-Karten.
+- **Lernflamme pflegen.** Sammle Lerntage und schalte Kleidung für deine Flamme frei. Das Schreibtischwidget ist ab macOS 14 verfügbar.
 
 ## Installation
 
-Lade das DMG unter [Releases](https://github.com/StrenghtLab/Blattkarten/releases) herunter, öffne es und ziehe Blattkarten in **Programme**. Die App benötigt macOS 13 Ventura oder neuer und unterstützt Intel und Apple Silicon. Die WidgetKit-Erweiterung für den Schreibtisch setzt macOS 14 oder neuer voraus. Die veröffentlichte App ist lokal signiert und nicht von Apple notarisiert.
+1. Lade das aktuelle DMG aus den [GitHub-Releases](https://github.com/StrenghtLab/Blattkarten/releases/latest) herunter.
+2. Öffne das DMG und ziehe **Blattkarten** in **Programme**.
+3. Öffne die App und wähle **KI-Studio**, um dein erstes Lernmaterial zu importieren.
 
-Im App-Menü unter **Blattkarten → Nach Updates suchen …** kannst du prüfen, ob ein neues DMG bereitsteht.
+Die App ist lokal signiert. Eine Apple-Notarisierung steht aus. Über **Blattkarten → Nach Updates suchen …** kannst du prüfen, ob eine neue Version verfügbar ist.
 
-## Bauen
+<details>
+<summary>KI einrichten und Lernflamme anzeigen</summary>
 
-Mit den Xcode Command Line Tools erstellt `./build.sh` die App und `./make-dmg.sh` das DMG. Der Release-Workflow veröffentlicht das DMG für die Version aus der Info.plist.
+Für die KI-Generierung wählst du im Studio **Mit KI**. Den Anbieter stellst du im **KI-Lernchat → KI einrichten** ein. Mit Ollama bleiben Anfragen auf dem Mac. Bei OpenAI wird der Lerntext erst nach Bestätigung gesendet. Im Lernchat werden beim Senden die Frage und passende Kartentexte übertragen. Der eingegebene OpenAI-Schlüssel bleibt bis zum Beenden der App im Arbeitsspeicher.
 
-## KI-Lernchat
+Füge **Lernflamme** in der macOS-Widget-Galerie hinzu. Alternativ öffnet **Lernflamme → Flamme auf dem Schreibtisch anzeigen** eine Schreibtischkarte aus der laufenden App.
 
-Öffne ein Fach oder einen Ordner und klicke unten rechts auf **KI-Lernchat**. Der Chat verwendet passende Karteikarten aus dem geöffneten Bereich einschließlich seiner Unterordner. Unter **KI einrichten** kannst du ein auf deinem Mac laufendes Ollama-Modell wählen oder einen OpenAI-API-Schlüssel eingeben. Der Schlüssel bleibt bis zum Beenden der App im Arbeitsspeicher. Bei OpenAI werden die Frage und passende Kartentexte erst beim Senden an OpenAI übertragen.
+</details>
 
-## Suche, Wiederholung und KI-Import
+## Lokal bauen
 
-Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Unter **Üben** kannst du fällige Karten, die Suchtreffer oder alle Karten auswählen. Gewusste Karten werden mit wachsenden Abständen wieder fällig. Schwierige Karten kommen früher zurück. Beim erneuten Import werden identische Karten am selben Ablageort übersprungen.
+Voraussetzung sind die Xcode Command Line Tools.
 
-**KI-Generator** nimmt eingefügten Text, Fotos und PDFs an. Prüfe den erkannten Text und wähle ein Kartenlimit. In der Vorschau kannst du Belegstellen aufklappen und Karten abwählen. Erst beim Speichern werden sie dem geöffneten Fach oder Ordner hinzugefügt. Bei OpenAI sendet die App den erkannten Text nur nach einer Bestätigung. **Datei öffnen**, der Kamerascan und der Schnellmodus im KI-Studio erstellen Karten anhand lokaler Textregeln. Im Studio lässt sich bei Bedarf die KI-Generierung auswählen. Die Kartenansicht zeigt vorhandene Belegstellen zum Aufklappen.
+```sh
+./build.sh
+./make-dmg.sh
+```
 
-### Antworten direkt in Blattkarten
-
-Wähle unter **KI einrichten** die **OpenAI API** oder ein lokales **Ollama**-Modell. Gib deine Frage im Blattkarten-Lernchat ein und klicke auf **Senden**. Frage, Antwort und Rückfragen bleiben in der nativen Chat-Ansicht von Blattkarten. Für das OpenAI-Modell brauchst du einen API-Schlüssel.
-
-Vor jeder Übungsrunde wählst du zwischen **Antworten eintippen** und **Karten umdrehen**. Im Tippmodus zeigt die Eingabetaste die Musterantwort. Bewerte dich anschließend mit **Gewusst** oder **Nochmal**. Beim ersten **Nochmal** bekommst du einen zweiten Versuch. Nach einem zweiten **Nochmal** kommt die Karte auf die Wiederholungsliste.
-
-## Lernflamme
-
-Bewertete Karten und erfolgreiche Arbeitsblattimporte zählen als Lernaktivität. Neue Streak-Rekorde, je fünf bewertete Karten und jeder erfolgreiche Import schalten weiteren Kleidungsstil frei. In der Kleiderauswahl gibt es 365 Kombinationen. Ist Lernflamme in der macOS-Widget-Galerie verfügbar, kannst du sie dort hinzufügen. Über **Lernflamme → Flamme auf dem Schreibtisch anzeigen** lässt sich alternativ eine Schreibtischkarte aus der laufenden App öffnen.
-
-Neue Lernkarten fragen möglichst genau einen Sachverhalt ab. Bei Physik werden Definitionen, Einheiten und Umstellungen der Formel separat gelernt.
-
-Die Rückseite zeigt zuerst die kurze Antwort. Bei passenden Karten folgt unter **Einfach erklärt** ein Merksatz oder ein Zahlenbeispiel. Im Karteneditor kannst du eigene Erklärungen ergänzen.
+Das erste Skript baut die native App. Das zweite packt ein DMG. GitHub Actions verwendet für Releases die Version aus der `Info.plist`.
