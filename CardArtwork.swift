@@ -1,11 +1,12 @@
 import SwiftUI
 
 enum CardArtwork {
-    case neuron, synapse, brain, impulse
+    case neuron, synapse, brain, impulse, cell, movement, parabola, molecule
     case series, parallel, ammeter, voltmeter, comparison, water, formula, currentFormula, resistanceFormula, currentUnit, voltageUnit, resistanceUnit, conversion, currentConversion, resistanceConversion, unit, concept
 
     init(_ card: Card) {
         let text = card.question.lowercased()
+        let topic = text + " " + card.answer.lowercased()
         if text.contains("synapse") { self = .synapse }
         else if text.contains("aktionspotenzial") { self = .impulse }
         else if text.contains("neuron") || text.contains("myelinscheide") { self = .neuron }
@@ -30,8 +31,27 @@ enum CardArtwork {
         else if text.contains("reihen-") && text.contains("parallel") { self = .comparison }
         else if text.contains("parallel") { self = .parallel }
         else if text.contains("reihenschaltung") { self = .series }
+        else if topic.contains("zellkern") || topic.contains("zellmembran") || topic.contains("mitochondri") { self = .cell }
+        else if text.contains("geschwindigkeit") || text.contains("beschleunigung") { self = .movement }
+        else if topic.contains("parabel") || (topic.contains("quadratisch") && topic.contains("funktion")) { self = .parabola }
+        else if topic.contains("wassermolekül") { self = .molecule }
         else { self = .concept }
     }
+
+    var caption: String? {
+        switch self {
+        case .cell: "Zelle im Querschnitt"
+        case .movement: "Geschwindigkeitsvektoren"
+        case .parabola: "Beispiel einer Parabel"
+        case .molecule: "Wassermolekül"
+        case .neuron: "Nervenzelle"
+        case .synapse: "Synapse"
+        case .series: "Reihenschaltung"
+        case .parallel: "Parallelschaltung"
+        default: nil
+        }
+    }
+
 }
 
 struct CardIllustration: View {
@@ -41,6 +61,8 @@ struct CardIllustration: View {
     var body: some View {
         if [.neuron, .synapse, .brain, .impulse].contains(artwork) {
             neuroSketch
+        } else if [.cell, .movement, .parabola, .molecule].contains(artwork) {
+            topicSketch
         } else if artwork == .comparison {
             HStack(spacing: 8) {
                 circuit(.series)
@@ -71,6 +93,68 @@ struct CardIllustration: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var topicSketch: some View {
+        Canvas { context, size in
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * size.width, y: y * size.height) }
+            func line(_ points: [CGPoint]) {
+                var path = Path()
+                path.addLines(points)
+                context.stroke(path, with: .foreground, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+            }
+            let teal = Color(red: 0.05, green: 0.42, blue: 0.35)
+            let violet = Color(red: 0.37, green: 0.24, blue: 0.71)
+            let blue = Color(red: 0.10, green: 0.38, blue: 0.63)
+            let coral = Color(red: 0.69, green: 0.23, blue: 0.32)
+            func oval(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, color: Color) {
+                let shape = Path(ellipseIn: CGRect(origin: p(x, y), size: CGSize(width: w * size.width, height: h * size.height)))
+                context.fill(shape, with: .color(color.opacity(0.16)))
+                context.stroke(shape, with: .color(color), lineWidth: 1.6)
+            }
+            func label(_ title: String, at point: CGPoint, color: Color) {
+                guard size.width >= 78 else { return }
+                var text = context.resolve(Text(title).font(.system(size: size.width > 120 ? 10 : 7, weight: .semibold)))
+                text.shading = .color(color)
+                context.draw(text, at: point)
+            }
+            switch artwork {
+            case .cell:
+                oval(0.08, 0.09, 0.72, 0.82, color: teal)
+                oval(0.31, 0.23, 0.27, 0.51, color: violet)
+                oval(0.21, 0.41, 0.09, 0.13, color: teal)
+                oval(0.62, 0.56, 0.11, 0.12, color: teal)
+                line([p(0.54, 0.31), p(0.68, 0.18), p(0.80, 0.18)])
+                label("Kern", at: p(0.88, 0.18), color: violet)
+            case .movement:
+                line([p(0.20, 0.73), p(0.50, 0.73), p(0.42, 0.59)])
+                line([p(0.50, 0.73), p(0.42, 0.87)])
+                line([p(0.20, 0.30), p(0.77, 0.30), p(0.69, 0.16)])
+                line([p(0.77, 0.30), p(0.69, 0.44)])
+                label("v₁", at: p(0.58, 0.73), color: teal)
+                label("v₂", at: p(0.86, 0.30), color: teal)
+            case .parabola:
+                line([p(0.15, 0.79), p(0.86, 0.79)])
+                line([p(0.50, 0.91), p(0.50, 0.11)])
+                var path = Path()
+                path.move(to: p(0.23, 0.17))
+                path.addQuadCurve(to: p(0.77, 0.17), control: p(0.50, 1.41))
+                context.stroke(path, with: .color(violet), lineWidth: 2.2)
+                label("x", at: p(0.91, 0.79), color: violet)
+                label("y", at: p(0.56, 0.10), color: violet)
+            case .molecule:
+                line([p(0.34, 0.55), p(0.44, 0.35)])
+                line([p(0.56, 0.35), p(0.66, 0.55)])
+                oval(0.38, 0.06, 0.24, 0.44, color: coral)
+                oval(0.22, 0.48, 0.19, 0.36, color: blue)
+                oval(0.59, 0.48, 0.19, 0.36, color: blue)
+                label("O", at: p(0.50, 0.28), color: coral)
+                label("H", at: p(0.315, 0.66), color: blue)
+                label("H", at: p(0.685, 0.66), color: blue)
+            default: break
+            }
+        }
+        .aspectRatio(1.65, contentMode: .fit)
     }
 
     private var neuroSketch: some View {

@@ -17,6 +17,7 @@ struct Card: Codable, Identifiable {
     var folderID: UUID? = nil
     var review: LearningProgress? = nil
     var explanation: String? = nil
+    var sourceExcerpt: String? = nil
 
     var subjectName: String { subject ?? "Allgemein" }
 }
@@ -34,7 +35,7 @@ enum StudyError: LocalizedError {
         switch self {
         case .unreadable: "Die Datei konnte nicht gelesen werden."
         case .empty: "Auf dem Blatt wurde kein lesbarer Text gefunden."
-        case .noFacts: "Auf dem Blatt wurden keine Aussagen für Karteikarten gefunden. Wähle ein Blatt mit Erklärungen, Definitionen oder Lösungen."
+        case .noFacts: "Auf dem Blatt wurden keine Aussagen für Karteikarten gefunden. Bei einer Aufgabenseite ohne Lösungen hilft die passende Erklärseite aus dem Buch."
         case .camera: "Die Kamera ist nicht verfügbar. Prüfe den Zugriff in den Systemeinstellungen."
         }
     }
@@ -42,7 +43,15 @@ enum StudyError: LocalizedError {
 
 enum Worksheet {
     static func recognize(_ image: CGImage) throws -> String {
-        let full = try recognizeRegion(image)
+        var full = try recognizeRegion(image)
+        if image.width > image.height, full.split(whereSeparator: \.isWhitespace).count < 15 {
+            for orientation in [CGImagePropertyOrientation.left, .right] {
+                if let rotated = try? recognizeRegion(image, orientation: orientation),
+                   rotated.split(whereSeparator: \.isWhitespace).count > full.split(whereSeparator: \.isWhitespace).count + 8 {
+                    full = rotated
+                }
+            }
+        }
         guard full.localizedCaseInsensitiveContains("Strom messen"),
               full.localizedCaseInsensitiveContains("Spannung messen"),
               !full.localizedCaseInsensitiveContains("Voltmeter V parallel") ||
@@ -73,7 +82,7 @@ enum Worksheet {
         return ([full] + recovered).joined(separator: "\n")
     }
 
-    private static func recognizeRegion(_ image: CGImage) throws -> String {
+    private static func recognizeRegion(_ image: CGImage, orientation: CGImagePropertyOrientation = .up) throws -> String {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["de-DE", "en-US"]
@@ -92,7 +101,7 @@ enum Worksheet {
             request.usesCPUOnly = true
         }
         #endif
-        try VNImageRequestHandler(cgImage: image).perform([request])
+        try VNImageRequestHandler(cgImage: image, orientation: orientation).perform([request])
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
 
@@ -253,14 +262,101 @@ enum Worksheet {
         return cards
     }
 
-    static func cards(from text: String) -> [Card] {
-        var questions = Set<String>()
-        return text.components(separatedBy: "\u{000C}")
-            .flatMap(pageCards)
-            .filter { questions.insert($0.question.lowercased()).inserted }
+    static func suggestedSubject(for text: String, title: String, available: [String]) -> String? {
+        let vocabulary: [String: [String]] = [
+            "Mathematik": ["gleichung", "bruchrechnung", "nenner", "zähler", "ableitung", "parabel", "koordinat", "pythagoras", "prozentrechnung", "wahrscheinlichkeit", "polynom"],
+            "Physik": ["stromstärk", "spannung", "widerstand", "stromkreis", "amperemeter", "voltmeter", "geschwindigkeit", "beschleunigung", "schwerkraft", "bewegungsenergie", "magnetfeld", "newton", "reihenschaltung"],
+            "Chemie": ["chemisch", "reaktion", "oxidation", "periodensystem", "atombindung", "molekül", "elektron", "proton", "säure", "neutralisation", "ionen"],
+            "Biologie": ["zellkern", "zellmembran", "mitochondri", "photosynthes", "chloroplast", "neuron", "synapse", "organismus", "enzym", "ökosystem", "dna", "erbinfo", "erbinformation", "evolution"],
+            "Geschichte": ["revolution", "weltkrieg", "mittelalter", "kaiserreich", "industrialisierung", "nationalsozial", "römisch", "historisch", "kolonial"],
+            "Erdkunde": ["klimazon", "kontinent", "plattentektonik", "vulkanismus", "erosion", "wasserkreislauf", "bevölkerungsdicht", "erdkruste", "verdunstung"],
+            "Deutsch": ["gedicht", "metapher", "reimschema", "erzähler", "satzglied", "wortart", "interpretation", "rechtschreib", "konjunktiv"],
+            "Englisch": ["grammar", "vocabulary", "tense", "verb", "conditional", "reported", "adjective", "pronoun", "übersetzung"],
+        ]
+        let heading = title + " " + text.prefix(240)
+        func tokens(_ value: String) -> Set<String> {
+            Set(value.lowercased().split { !$0.isLetter }.map(String.init))
+        }
+        let headings = tokens(heading)
+        let all = tokens(title + " " + text)
+        let named = available.filter { subject in
+            guard subject != "Allgemein" else { return false }
+            let name = tokens(subject)
+            return !name.isEmpty && name.isSubset(of: headings)
+        }
+        if named.count == 1 { return named.first }
+        let scores = available.compactMap { subject -> (String, Int)? in
+            guard let terms = vocabulary[subject] else { return nil }
+            let hits = terms.filter { prefix in all.contains { $0.hasPrefix(prefix) } }
+            guard hits.count >= 2 else { return nil }
+            let leading = hits.filter { prefix in headings.contains { $0.hasPrefix(prefix) } }.count
+            return (subject, hits.count * 2 + leading)
+        }.sorted { $0.1 > $1.1 }
+        guard let best = scores.first, scores.count == 1 || best.1 >= scores[1].1 + 3 else { return nil }
+        return best.0
     }
 
-    private static func pageCards(_ text: String) -> [Card] {
+    static let studioTextLimit = 60_000
+
+    static func sections(from text: String) -> [String] {
+        cleanText(text).components(separatedBy: "\u{000C}").flatMap { page -> [String] in
+            var sections: [String] = []
+            var buffer = ""
+            for line in studyText(on: page).components(separatedBy: .newlines) {
+                var rest = line[...]
+                while !rest.isEmpty {
+                    let proposed = rest.prefix(3_800)
+                    let separator = proposed.count == rest.count ? nil : proposed.lastIndex(where: \.isWhitespace)
+                    let piece = separator.map { rest[..<$0] }.flatMap { $0.count > 1_900 ? $0 : nil } ?? proposed
+                    if buffer.count + piece.count + 1 > 4_000 {
+                        sections.append(buffer)
+                        buffer = ""
+                    }
+                    buffer += piece + "\n"
+                    rest = rest.dropFirst(piece.count)
+                }
+            }
+            if !buffer.isEmpty { sections.append(buffer) }
+            return sections
+        }
+    }
+
+    static func cards(from text: String) -> [Card] {
+        let groups = sections(from: text).map(pageCards)
+        var questions = Set<String>()
+        var cards: [Card] = []
+        let depth = groups.map(\.count).max() ?? 0
+        for index in 0..<depth {
+            for group in groups where group.indices.contains(index) {
+                let card = group[index]
+                if questions.insert(card.contentKey.question).inserted { cards.append(card) }
+            }
+        }
+        return cards
+    }
+
+    static func cleanText(_ text: String) -> String {
+        text.replacingOccurrences(of: "\u{00AD}", with: "")
+            .replacingOccurrences(of: #"(\p{L}{3,})-[ \t]*\r?\n[ \t]*(\p{Ll}{2,})"#,
+                                  with: "$1$2", options: .regularExpression)
+    }
+
+    static func studyText(on page: String) -> String {
+        guard containsUnsolvedChoices(page) else { return page }
+        let heading = #"(?im)^[ \t]*(?:Übungsaufgaben|Aufgaben|Teste dich)[ \t]*:?[ \t]*$"#
+        guard let start = page.range(of: heading, options: .regularExpression),
+              !containsUnsolvedChoices(String(page[..<start.lowerBound])) else { return "" }
+        return String(page[..<start.lowerBound])
+    }
+
+    static func containsUnsolvedChoices(_ text: String) -> Bool {
+        let normalized = text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return match(#"\b(?:welche der folgenden aussagen|finde .*? ein gegenbeispiel|ob die folgenden aussagen)\b"#,
+                     in: normalized) != nil
+    }
+
+    private static func pageCards(_ page: String) -> [Card] {
+        let text = studyText(on: page)
         struct Candidate {
             let card: Card
             let priority: Int
@@ -275,9 +371,11 @@ enum Worksheet {
         var topic = ""
         var pendingQuestion: String?
         var paragraph = ""
+        var sourceSentence: String?
 
         func add(_ question: String, _ answer: String, priority: Int) {
-            guard let card = Card.generated(question: question, answer: answer) else { return }
+            guard var card = Card.generated(question: question, answer: answer) else { return }
+            card.sourceExcerpt = sourceSentence
             candidates.append(Candidate(card: card, priority: priority, topic: topic))
         }
 
@@ -291,13 +389,22 @@ enum Worksheet {
 
         func summarize(_ sentence: String) {
             let fact = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !fact.isEmpty, !fact.hasSuffix("?") else { return }
+            guard !fact.isEmpty, !fact.hasSuffix("?"),
+                  match(#"^(?:er|sie|es|dies|das|diese|dabei|dadurch|dann|hier|dort)\s+(?:ist|sind|wird|werden|kann|können|hat|haben|entsteht|enthält|führt|ändert)\b"#, in: fact) == nil else { return }
+            sourceSentence = fact
+            defer { sourceSentence = nil }
             if let parts = match(#"^Im Jahr (\d{3,4}) (.{12,})$"#, in: fact) {
                 let event = parts[1].trimmingCharacters(in: CharacterSet(charactersIn: ".! "))
                 add("In welchem Jahr geschah Folgendes: \(event)?", parts[0], priority: 8)
             } else if let parts = match(#"^(.{6,}?)(?:,)?\s+(weil|denn)\s+(.{5,})$"#, in: fact) {
                 let claim = parts[0].trimmingCharacters(in: CharacterSet(charactersIn: ", "))
                 add("Warum gilt „\(claim)“?", parts[2], priority: 9)
+            } else if let parts = match(#"^Unter\s+(.{2,65}?)\s+versteht man\s+(.{5,})$"#, in: fact) {
+                add("Was versteht man unter \(subjectInQuestion(parts[0]))?", parts[1], priority: 9)
+            } else if let parts = match(#"^Als\s+(.{2,65}?)\s+bezeichnet man\s+(.{5,})$"#, in: fact) {
+                add("Was bezeichnet man als \(subjectInQuestion(parts[0]))?", parts[1], priority: 9)
+            } else if let parts = match(#"^(.{2,65}?)\s+(führt|führen)\s+zu\s+(.{5,})$"#, in: fact) {
+                add("Wozu \(parts[1].lowercased()) \(subjectInQuestion(parts[0]))?", parts[2], priority: 8)
             } else if let parts = match(#"^(.{2,65}?)\s+(ist|sind|bezeichnet|bedeutet)\s+(.{6,})$"#, in: fact) {
                 let plural = parts[1].lowercased() == "sind"
                 let subject = subjectInQuestion(parts[0])
@@ -346,7 +453,11 @@ enum Worksheet {
             let line = match(#"^(?:[•●▪*]|\d{1,2}[.)])\s+(.*)$"#, in: raw)?.first ?? raw
             if let answer = match(#"^(?:Antwort|Lösung|A)\s*:\s*(.+)$"#, in: line)?.first {
                 flush()
-                if let question = pendingQuestion { add(question, answer, priority: 10) }
+                if let question = pendingQuestion {
+                    sourceSentence = question + " " + line
+                    add(question, answer, priority: 10)
+                    sourceSentence = nil
+                }
                 pendingQuestion = nil
                 continue
             }
@@ -362,7 +473,9 @@ enum Worksheet {
             }
             if let parts = match(#"^([^:–—]{2,55}?)(?:\s+[–—]\s+|:\s+)(.{2,})$"#, in: line) {
                 flush()
+                sourceSentence = line
                 add("Was bedeutet „\(parts[0])“?", parts[1], priority: 9)
+                sourceSentence = nil
                 continue
             }
             if !line.hasSuffix("."), !line.hasSuffix("!"),
@@ -563,7 +676,6 @@ struct ContentView: View {
     @State private var newFolder = ""
     @State private var search = ""
     @State private var importNotice: String?
-    @State private var confirmCloudImport = false
     @State private var showTutorSetup = false
     @State private var reviewClock = Date.now
 
@@ -647,7 +759,7 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var cards: [Card] = []
     @State private var session: [Card] = []
-    @State private var page = "Sammlung"
+    @State private var page = "Start"
     @State private var cursor = 0
     @State private var known = 0
     @State private var missed: [Card] = []
@@ -695,12 +807,17 @@ struct ContentView: View {
         HStack(spacing: 0) {
             sidebar
             VStack(alignment: .leading, spacing: 0) {
-                if page == "Sammlung" { collection } else { practice }
+                switch page {
+                case "Start": dashboard
+                case "Sammlung": collection
+                case "KI-Studio": generatorWorkspace
+                default: practice
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
-                RadialGradient(colors: [Color(red: 0.17, green: 0.18, blue: 0.32), ink],
-                               center: .topTrailing, startRadius: 10, endRadius: 740)
+                LinearGradient(colors: [Color(red: 0.17, green: 0.12, blue: 0.26), ink],
+                               startPoint: .top, endPoint: .bottom)
             }
             .overlay(alignment: .bottomTrailing) {
                 TutorDock(scope: tutorScope, scopeID: currentFolder.map { "folder:" + $0.id.uuidString } ?? "subject:" + selectedSubject,
@@ -733,12 +850,6 @@ struct ContentView: View {
             session = []
             flipped = false
             appeared = true
-        }
-        .confirmationDialog("Arbeitsblatt mit OpenAI verarbeiten?", isPresented: $confirmCloudImport) {
-            Button("Datei wählen und Text senden") { chooseFile(usingAI: true) }
-            Button("Abbrechen", role: .cancel) {}
-        } message: {
-            Text("Beim Import wird der erkannte Text des ausgewählten Arbeitsblatts an OpenAI gesendet. Es können API-Kosten anfallen.")
         }
         .alert("Arbeitsblatt importiert", isPresented: Binding(
             get: { importNotice != nil }, set: { if !$0 { importNotice = nil } }
@@ -844,14 +955,15 @@ struct ContentView: View {
     var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(ink).frame(width: 38, height: 38)
-                    .background(mint, in: RoundedRectangle(cornerRadius: 12))
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable().scaledToFit().frame(width: 38, height: 38)
+                    .accessibilityHidden(true)
                 Text("Blattkarten").font(.system(size: 18, weight: .bold))
             }
             .padding(.bottom, 14)
-            navigation("Sammlung", "rectangle.stack")
+            navigation("Start", "house.fill")
+            navigation("Sammlung", "rectangle.stack.fill")
+            navigation("KI-Studio", "sparkles")
             navigation("Üben", "bolt.fill")
             Divider().padding(.vertical, 3)
             HStack {
@@ -871,6 +983,7 @@ struct ContentView: View {
                 VStack(spacing: 3) {
                     ForEach(subjects, id: \.self) { subject in
                         subjectButton(subject)
+                        if selectedSubject == subject { sidebarFolders }
                     }
                 }
             }
@@ -893,9 +1006,9 @@ struct ContentView: View {
                 .font(.system(size: 11)).foregroundStyle(soft)
         }
         .padding(20).padding(.top, 16)
-        .frame(width: 196)
+        .frame(width: 208)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(red: 0.08, green: 0.10, blue: 0.17))
+        .background(Color(red: 0.105, green: 0.077, blue: 0.16))
         .overlay(alignment: .trailing) { Rectangle().fill(.white.opacity(0.08)).frame(width: 1) }
     }
 
@@ -906,7 +1019,13 @@ struct ContentView: View {
             selectedSubject = subject
             showFolder(nil)
         } label: {
-            Label(subject, systemImage: icon)
+            HStack {
+                Label(subject, systemImage: icon).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(cards.lazy.filter { $0.subjectName == subject }.count.formatted())
+                    .font(.caption2.monospacedDigit()).foregroundStyle(soft)
+                    .accessibilityLabel("Karten im Fach")
+            }
                 .font(.system(size: 13, weight: selected ? .semibold : .regular))
                 .lineLimit(1)
                 .foregroundStyle(selected ? mint : soft)
@@ -917,6 +1036,37 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var sidebarFolders: some View {
+        let children = Dictionary(grouping: folders.filter { $0.subject == selectedSubject }, by: \.parentID)
+        func branches(_ parent: UUID?, depth: Int) -> [(folder: WorksheetFolder, depth: Int)] {
+            (children[parent] ?? []).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                .flatMap { [($0, depth)] + branches($0.id, depth: depth + 1) }
+        }
+
+        return ForEach(branches(nil, depth: 0), id: \.folder.id) { entry in
+            let selected = entry.folder.id == currentFolderID
+            Button { showFolder(entry.folder.id) } label: {
+                Label(entry.folder.name, systemImage: selected ? "folder.fill" : "folder")
+                    .lineLimit(1)
+                    .font(.caption)
+                    .foregroundStyle(selected ? mint : soft)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+                    .padding(.leading, CGFloat(19 + min(entry.depth, 4) * 10))
+                    .background(selected ? mint.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .contextMenu {
+                Button("Unterordner hinzufügen") {
+                    showFolder(entry.folder.id)
+                    newFolder = ""
+                    addingFolder = true
+                }
+            }
+        }
     }
 
     func addSubject() {
@@ -992,7 +1142,9 @@ struct ContentView: View {
 
     func navigation(_ title: String, _ icon: String) -> some View {
         Button {
-            if title == "Üben", session.isEmpty, !practiceCards.isEmpty {
+            if title == "KI-Studio" {
+                startAIImport()
+            } else if title == "Üben", session.isEmpty, !practiceCards.isEmpty {
                 choosePracticeMode(dueCards.isEmpty ? practiceCards : dueCards)
             } else {
                 page = title
@@ -1000,19 +1152,127 @@ struct ContentView: View {
         } label: {
             Label(title, systemImage: icon)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(page == title ? mint : soft)
+                .foregroundStyle(page == title ? .white : soft)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(11)
-                .background(page == title ? mint.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                .background(page == title ? Color(red: 0.38, green: 0.24, blue: 0.68) : .clear, in: RoundedRectangle(cornerRadius: 10))
         }.buttonStyle(.plain)
+    }
+
+    private var generatorWorkspace: some View {
+        GeneratorStudio(
+            destination: [selectedSubject, currentFolder?.name].compactMap { $0 }.joined(separator: " / "),
+            subjects: subjects,
+            activeSubject: selectedSubject,
+            insideFolder: currentFolder != nil,
+            usesCloud: tutorSettings.provider == .openAI,
+            preferredModel: tutorSettings.model,
+            generate: generateInStudio,
+            save: { drafts, title, subject in
+                let destination = subject ?? selectedSubject
+                storeImport(drafts, title: title, subject: destination,
+                            folderID: destination == selectedSubject ? currentFolder?.id : nil)
+                selectedSubject = destination
+                page = "Sammlung"
+            }
+        )
+    }
+
+    private var dashboard: some View {
+        let due = cards.lazy.filter { $0.isDue(at: reviewClock) }.count
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 19) {
+                Text("Dein Lernstudio")
+                    .font(.system(size: 31, weight: .bold, design: .rounded))
+                    .accessibilityAddTraits(.isHeader)
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 13) {
+                        Text("Aus Lernstoff werden Karten.")
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundStyle(ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("Starte mit einem Foto, PDF oder deinem Lerntext.")
+                            .foregroundStyle(ink.opacity(0.78))
+                        Button(action: startAIImport) {
+                            Label("KI-Studio öffnen", systemImage: "sparkles")
+                        }.buttonStyle(Pill(tint: .white))
+                    }
+                    Spacer(minLength: 0)
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable().scaledToFit().frame(width: 104, height: 104)
+                        .accessibilityHidden(true)
+                }
+                .padding(23)
+                .background(
+                    LinearGradient(colors: [Color(red: 0.89, green: 0.82, blue: 1), Color(red: 0.68, green: 0.69, blue: 1)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 22)
+                )
+                HStack(spacing: 10) {
+                    dashboardStat("Karten", count: cards.count, icon: "rectangle.on.rectangle", tint: lilac)
+                    dashboardStat("Fällig", count: due, icon: "clock", tint: mint)
+                    dashboardStat("Lerntage in Folge", count: pet.streak(at: reviewClock), icon: "flame.fill", tint: .orange)
+                }
+                HStack(spacing: 10) {
+                    Button { choosePracticeMode(dueCards.isEmpty ? practiceCards : dueCards) } label: {
+                        Label("\(location) üben", systemImage: "bolt.fill").lineLimit(1)
+                    }.buttonStyle(Pill(tint: mint)).disabled(practiceCards.isEmpty)
+                    Button { page = "Sammlung" } label: {
+                        Label("Zur Sammlung", systemImage: "rectangle.stack")
+                    }.buttonStyle(Pill())
+                    Button { camera = true } label: {
+                        Label("Kamera öffnen", systemImage: "camera")
+                    }.buttonStyle(Pill()).disabled(busy)
+                }
+                VStack(alignment: .leading, spacing: 9) {
+                    Text("Fächer").font(.title3.bold())
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 9)], spacing: 9) {
+                        ForEach(subjects, id: \.self) { subject in
+                            Button {
+                                selectedSubject = subject
+                                showFolder(nil)
+                            } label: {
+                                HStack {
+                                    Text(subject).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(lilac)
+                                }.padding(12).background(panel, in: RoundedRectangle(cornerRadius: 10))
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .padding(26).padding(.bottom, 45)
+        }
+    }
+
+    private func dashboardStat(_ title: String, count: Int, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundStyle(tint)
+            Text(count.formatted()).font(.system(size: 25, weight: .bold, design: .rounded))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(13)
+        .background(panel, in: RoundedRectangle(cornerRadius: 13))
     }
 
     var collection: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                folderHeader
+                HStack(alignment: .center, spacing: 12) {
+                    folderHeader
+                    Spacer(minLength: 0)
+                    Button { camera = true } label: {
+                        Label("Kamera", systemImage: "camera")
+                    }.buttonStyle(Pill()).disabled(busy)
+                    Button { chooseFile() } label: {
+                        Label("Importieren", systemImage: "arrow.down.document")
+                    }.buttonStyle(Pill(tint: lilac)).disabled(busy)
+                }
+                .padding(16)
+                .background(lilac.opacity(0.12), in: RoundedRectangle(cornerRadius: 15))
                 if !childFolders.isEmpty { folderGrid }
-                importPanel
+                if displayedCards.isEmpty || busy { importPanel }
                 HStack {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Karteikarten")
@@ -1141,7 +1401,7 @@ struct ContentView: View {
                         Label("Datei öffnen", systemImage: "arrow.up.document")
                     }.buttonStyle(Pill())
                     Button(action: startAIImport) {
-                        Label("Datei mit KI", systemImage: "sparkles")
+                        Label("KI-Generator", systemImage: "sparkles")
                     }.buttonStyle(Pill())
                 }.disabled(busy)
             }
@@ -1318,84 +1578,92 @@ struct ContentView: View {
     func persist() { if let encoded = try? JSONEncoder().encode(cards) { saved = encoded } }
 
     func startAIImport() {
-        if tutorSettings.provider == .openAI {
-            guard !tutorSettings.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                tutorOpen = true
-                showTutorSetup = true
-                return
-            }
-            confirmCloudImport = true
-        } else {
-            chooseFile(usingAI: true)
-        }
+        tutorOpen = false
+        page = "KI-Studio"
     }
 
-    func chooseFile(usingAI: Bool = false) {
+    private func generateInStudio(_ text: String, limit: Int, model: String, timeout: TimeInterval) async throws -> [Card] {
+        let backend: TutorClient.Backend
+        if tutorSettings.provider == .openAI {
+            let key = tutorSettings.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { throw TutorClient.Failure.server(401) }
+            backend = .openAI(key)
+        } else {
+            guard !model.isEmpty else { throw TutorClient.Failure.unavailable }
+            backend = .local(model)
+        }
+        return try await TutorClient.createCards(backend: backend, worksheet: text, localTimeout: timeout, limit: limit)
+    }
+
+    func chooseFile() {
         let picker = NSOpenPanel()
         picker.allowedContentTypes = [.image, .pdf]
         picker.allowsMultipleSelection = false
         picker.message = "Wähle ein Arbeitsblatt als Bild oder PDF."
-        if picker.runModal() == .OK, let url = picker.url { importFile(url, usingAI: usingAI) }
+        if picker.runModal() == .OK, let url = picker.url { importFile(url) }
     }
 
-    func importFile(_ url: URL, usingAI: Bool = false) {
-        process(title: url.deletingPathExtension().lastPathComponent, usingAI: usingAI) { try Worksheet.read(url) }
+    func importFile(_ url: URL) {
+        process(title: url.deletingPathExtension().lastPathComponent) { try Worksheet.read(url) }
     }
 
-    func process(title: String, usingAI: Bool = false, load: @escaping @Sendable () throws -> String) {
+    func process(title: String, load: @escaping @Sendable () throws -> String) {
         guard !busy else { return }
         let importSubject = selectedSubject
         let importFolderID = currentFolder?.id
-        let cloudKey = usingAI && tutorSettings.provider == .openAI
-            ? tutorSettings.key.trimmingCharacters(in: .whitespacesAndNewlines) : nil
-        let preferredModel = tutorSettings.model
+        let availableSubjects = subjects
         busy = true
         Task { @MainActor in
             defer { busy = false }
             do {
                 let text = try await Task.detached { try load() }.value
                 guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw StudyError.empty }
-                let generated: [Card]
-                if usingAI {
-                    let backend: TutorClient.Backend
-                    if let cloudKey {
-                        backend = .openAI(cloudKey)
-                    } else {
-                        let local = try await TutorClient.localModels()
-                        guard let model = local.contains(preferredModel) ? preferredModel : local.first else {
-                            throw TutorClient.Failure.unavailable
-                        }
-                        backend = .local(model)
-                    }
-                    generated = try await TutorClient.createCards(backend: backend, worksheet: text)
-                } else {
-                    generated = await Task.detached { Worksheet.cards(from: text) }.value
-                    guard !generated.isEmpty else { throw StudyError.noFacts }
+                let result = await Task.detached {
+                    let cards = Worksheet.cards(from: text)
+                    let subject = importFolderID == nil
+                        ? Worksheet.suggestedSubject(for: text, title: title, available: availableSubjects) : nil
+                    return (cards, subject)
+                }.value
+                guard !result.0.isEmpty else { throw StudyError.noFacts }
+                let destination = result.1 ?? importSubject
+                let shouldFollow = selectedSubject == importSubject && currentFolder?.id == importFolderID
+                storeImport(result.0, title: title, subject: destination, folderID: importFolderID)
+                if shouldFollow {
+                    selectedSubject = destination
+                    page = "Sammlung"
                 }
-
-                var knownCards = Set(cards.filter { $0.subjectName == importSubject && $0.folderID == importFolderID }.map(\.contentKey))
-                let fresh = generated.filter { knownCards.insert($0.contentKey).inserted }
-                guard !fresh.isEmpty else {
-                    importNotice = "Diese Karten gibt es hier bereits."
-                    return
-                }
-                if selectedSubject == importSubject && currentFolder?.id == importFolderID { appeared = reduceMotion }
-                cards = fresh.map { draft in
-                    var card = draft
-                    card.subject = importSubject
-                    card.worksheet = title
-                    card.folderID = importFolderID
-                    return card
-                } + cards
-                persist()
-                rewardStudy(worksheet: true)
-                if !reduceMotion { try? await Task.sleep(for: .milliseconds(90)) }
-                appeared = true
             } catch {
                 self.error = error.localizedDescription
             }
         }
     }
+
+    private func storeImport(_ drafts: [Card], title: String, subject: String, folderID: UUID?) {
+        var known = Set(cards.filter { $0.subjectName == subject && $0.folderID == folderID }.map(\.contentKey))
+        let fresh = drafts.filter { known.insert($0.contentKey).inserted }
+        guard !fresh.isEmpty else {
+            importNotice = "Diese Karten gibt es hier bereits."
+            return
+        }
+        let visible = selectedSubject == subject && currentFolder?.id == folderID
+        if visible { appeared = reduceMotion }
+        cards = fresh.map { draft in
+            var card = draft
+            card.subject = subject
+            card.worksheet = title
+            card.folderID = folderID
+            return card
+        } + cards
+        persist()
+        rewardStudy(worksheet: true)
+        if visible {
+            Task { @MainActor in
+                if !reduceMotion { try? await Task.sleep(for: .milliseconds(90)) }
+                appeared = true
+            }
+        }
+    }
+
 }
 
 private struct PracticeProgressBar: View {
@@ -1617,6 +1885,257 @@ private extension View {
             self.scrollBounceBehavior(.basedOnSize)
         } else {
             self
+        }
+    }
+}
+
+private struct GeneratorStudio: View {
+    let destination: String
+    let subjects: [String]
+    let activeSubject: String
+    let insideFolder: Bool
+    let usesCloud: Bool
+    let preferredModel: String
+    let generate: (String, Int, String, TimeInterval) async throws -> [Card]
+    let save: ([Card], String, String?) -> Void
+
+    @State private var source = ""
+    @State private var suggestedSubject: String?
+    @State private var chosenSubject: String?
+    @State private var title = "KI-Karten"
+    @State private var limit = 6
+    @State private var pending = false
+    @State private var cards: [Card] = []
+    @State private var failure: String?
+    @State private var fallbackNotice: String?
+    @State private var confirmCloud = false
+    @State private var isPreview = false
+    @State private var useAI = false
+    @State private var availableModels: [String] = []
+    @State private var model = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 16) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(lilac)
+                    .frame(width: 55, height: 55)
+                    .background(lilac.opacity(0.16), in: RoundedRectangle(cornerRadius: 15))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(isPreview ? "Karten prüfen" : "KI-Karteikarten")
+                        .font(.system(size: 28, weight: .bold))
+                    Label(chosenSubject ?? suggestedSubject ?? destination, systemImage: "folder").foregroundStyle(soft)
+                }
+                Spacer()
+                if isPreview {
+                    Text(cards.count.formatted()).font(.title2.monospacedDigit().bold()).foregroundStyle(lilac)
+                }
+            }
+            .padding(18)
+            .background(LinearGradient(colors: [panel, lilac.opacity(0.20)],
+                                       startPoint: .leading, endPoint: .trailing),
+                        in: RoundedRectangle(cornerRadius: 18))
+
+            if isPreview {
+                Picker("Speichern in", selection: $chosenSubject) {
+                    Text(suggestedSubject.map { "\($0) · automatisch erkannt" } ?? destination).tag(nil as String?)
+                    ForEach(subjects, id: \.self) { subject in
+                        Text(subject == activeSubject && insideFolder ? destination : subject).tag(Optional(subject))
+                    }
+                }.frame(maxWidth: 390)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(cards) { card in
+                            VStack(alignment: .leading, spacing: 9) {
+                                HStack {
+                                    Text(card.question).font(.headline)
+                                    Spacer()
+                                    Button(role: .destructive) {
+                                        cards.removeAll { $0.id == card.id }
+                                    } label: { Image(systemName: "trash") }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel("Karte entfernen")
+                                }
+                                Text(card.answer).textSelection(.enabled)
+                                let artwork = CardArtwork(card)
+                                if artwork != .concept {
+                                    CardIllustration(artwork: artwork)
+                                        .frame(width: 102, height: 47)
+                                        .foregroundStyle(lilac)
+                                        .accessibilityHidden(true)
+                                }
+                                if let source = card.sourceExcerpt {
+                                    DisclosureGroup("Belegstelle") {
+                                        Text(source).textSelection(.enabled).padding(.top, 5)
+                                    }.font(.caption).foregroundStyle(soft)
+                                }
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(panel, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        if cards.isEmpty { Text("Keine Karten ausgewählt.").foregroundStyle(soft) }
+                    }
+                }
+            } else {
+                HStack {
+                    Button(action: loadFile) {
+                        Label("Bild oder PDF öffnen", systemImage: "photo.on.rectangle")
+                    }.buttonStyle(Pill())
+                    Spacer()
+                    Text("\(source.count.formatted(.number.locale(Locale(identifier: "de_DE")))) / 60.000 Zeichen")
+                        .font(.caption.monospacedDigit()).foregroundStyle(source.count > Worksheet.studioTextLimit ? .orange : soft)
+                }.disabled(pending)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Lerntext").font(.headline)
+                    TextEditor(text: $source)
+                        .accessibilityLabel("Lerntext")
+                        .font(.body)
+                        .padding(7)
+                        .scrollContentBackground(.hidden)
+                        .background(panel, in: RoundedRectangle(cornerRadius: 12))
+                        .disabled(pending)
+                }
+                Picker("Erstellung", selection: $useAI) {
+                    Label("Schnell", systemImage: "bolt.fill").tag(false)
+                    Label("Mit KI", systemImage: "sparkles").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .disabled(pending)
+                .onChange(of: useAI) { enabled in
+                    failure = nil
+                    if enabled && !usesCloud { Task { await loadModels() } }
+                }
+                HStack {
+                    Text("Kartenlimit").font(.subheadline.weight(.semibold))
+                    Picker("Kartenlimit", selection: $limit) {
+                        Text("3 Karten").tag(3)
+                        Text("6 Karten").tag(6)
+                        Text("10 Karten").tag(10)
+                        Text("20 Karten").tag(20)
+                    }.labelsHidden().pickerStyle(.segmented).frame(maxWidth: 305).disabled(pending)
+                    Spacer()
+                    if !useAI {
+                        Text("Lokal auf diesem Mac").font(.caption).foregroundStyle(soft)
+                    } else if usesCloud {
+                        Text("OpenAI").font(.caption).foregroundStyle(soft)
+                    } else if !availableModels.isEmpty {
+                        Picker("Ollama-Modell", selection: $model) {
+                            ForEach(availableModels, id: \.self) { Text($0).tag($0) }
+                        }.labelsHidden().frame(maxWidth: 150).disabled(pending)
+                    } else {
+                        Button("Ollama prüfen") { Task { await loadModels() } }
+                            .buttonStyle(Pill()).disabled(pending)
+                    }
+                }
+            }
+            if let failure { Label(failure, systemImage: "exclamationmark.circle").foregroundStyle(.orange) }
+            if isPreview, let fallbackNotice {
+                Label(fallbackNotice, systemImage: "bolt.fill").font(.subheadline).foregroundStyle(lilac)
+            }
+            Divider()
+            HStack {
+                if isPreview {
+                    Button("Zurück zum Lerntext") { isPreview = false }.buttonStyle(Pill())
+                } else if pending {
+                    ProgressView().controlSize(.small)
+                    Text("Lernmaterial wird verarbeitet …").foregroundStyle(soft)
+                }
+                Spacer()
+                if isPreview {
+                    Button("\(cards.count) Karten speichern") {
+                        save(cards, title, chosenSubject ?? suggestedSubject)
+                    }.buttonStyle(Pill(tint: mint)).disabled(cards.isEmpty)
+                } else {
+                    Button {
+                        if useAI && usesCloud { confirmCloud = true } else { startGeneration() }
+                    } label: { Label("Karten generieren", systemImage: "sparkles") }
+                    .buttonStyle(Pill(tint: mint))
+                    .disabled(pending || (useAI && !usesCloud && model.isEmpty) || source.trimmingCharacters(in: .whitespacesAndNewlines).count < 40 || source.count > Worksheet.studioTextLimit)
+                }
+            }
+        }
+        .padding(24)
+        .padding(.bottom, 48)
+        .frame(maxWidth: 900, maxHeight: .infinity, alignment: .topLeading)
+        .foregroundStyle(.white)
+        .confirmationDialog("Lerntext an OpenAI senden?", isPresented: $confirmCloud) {
+            Button("Text senden und Karten erstellen") { startGeneration() }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("OpenAI verarbeitet den Text aus dem Editor. Dabei können API-Kosten anfallen.")
+        }
+    }
+
+    private func loadModels() async {
+        do {
+            let models = try await TutorClient.localModels()
+            availableModels = models
+            model = models.contains(preferredModel) ? preferredModel :
+                (models.first { $0 == "qwen2.5:1.5b" } ?? models.first ?? "")
+            if useAI { failure = models.isEmpty ? "Installiere ein lokales Modell in Ollama und prüfe erneut." : nil }
+        } catch { if useAI { failure = error.localizedDescription } }
+    }
+
+    private func loadFile() {
+        let picker = NSOpenPanel()
+        picker.allowedContentTypes = [.image, .pdf]
+        picker.allowsMultipleSelection = true
+        guard picker.runModal() == .OK, !picker.urls.isEmpty else { return }
+        let urls = picker.urls
+        pending = true
+        failure = nil
+        Task { @MainActor in
+            defer { pending = false }
+            do {
+                let text = try await Task.detached {
+                    try urls.map(Worksheet.read).joined(separator: "\u{000C}")
+                }.value
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw StudyError.empty }
+                source = text
+                title = urls.count == 1 ? urls[0].deletingPathExtension().lastPathComponent : "\(urls.count) Dateien"
+                if text.count > Worksheet.studioTextLimit { failure = "Kürze den Lerntext auf höchstens 60.000 Zeichen." }
+            } catch { failure = error.localizedDescription }
+        }
+    }
+
+    private func startGeneration() {
+        let input = source
+        let count = limit
+        let selectedModel = model
+        let useAI = useAI
+        pending = true
+        failure = nil
+        fallbackNotice = nil
+        Task { @MainActor in
+            defer { pending = false }
+            do {
+                let quick = useAI && usesCloud ? [] : await Task.detached {
+                    Array(Worksheet.cards(from: input).prefix(count))
+                }.value
+                if useAI {
+                    do {
+                        cards = try await generate(input, count, selectedModel, quick.isEmpty ? 75 : 20)
+                    } catch where !quick.isEmpty && !Task.isCancelled {
+                        cards = quick
+                        fallbackNotice = "Ollama hat keine belegten Karten geliefert. Hier sind die Karten aus dem Schnellmodus."
+                    }
+                } else {
+                    guard !quick.isEmpty else {
+                        failure = "Im Schnellmodus wurden keine eindeutigen Karten gefunden. Versuche es mit der KI oder mit mehr erklärendem Text."
+                        return
+                    }
+                    cards = quick
+                }
+                suggestedSubject = insideFolder ? nil :
+                    Worksheet.suggestedSubject(for: input, title: title, available: subjects)
+                chosenSubject = nil
+                isPreview = true
+            } catch let error as URLError where error.code == .timedOut {
+                failure = "Ollama war zu langsam. Wähle ein kleineres Modell oder kürze den Lerntext."
+            } catch { failure = error.localizedDescription }
         }
     }
 }

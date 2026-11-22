@@ -28,9 +28,19 @@ struct PaperCardPair: View {
                 PaperCardFace(text: card.answer, artwork: CardArtwork(card), explanation: card.learningNote)
             }
             .fixedSize(horizontal: false, vertical: true)
+            if let excerpt = card.sourceExcerpt {
+                DisclosureGroup("Belegstelle") {
+                    Text(excerpt)
+                        .textSelection(.enabled)
+                        .padding(.vertical, 5)
+                }
+                .font(.caption)
+                .foregroundStyle(soft)
+            }
         }
-        .padding(10)
-        .background(panel, in: RoundedRectangle(cornerRadius: 16))
+        .padding(12)
+        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 21))
+        .overlay { RoundedRectangle(cornerRadius: 21).strokeBorder(.white.opacity(0.10)) }
     }
 }
 
@@ -42,45 +52,50 @@ struct PaperCardFace: View {
 
     private var back: Bool { artwork != nil }
     private var accent: Color {
-        back ? Color(red: 0.10, green: 0.39, blue: 0.28) : Color(red: 0.34, green: 0.24, blue: 0.60)
+        back ? Color(red: 0.06, green: 0.35, blue: 0.31) : Color(red: 0.31, green: 0.19, blue: 0.58)
     }
 
     static func paperColor(back: Bool) -> Color {
-        back ? Color(red: 0.92, green: 0.98, blue: 0.94) : Color(red: 0.98, green: 0.96, blue: 0.91)
+        back ? Color(red: 0.90, green: 0.97, blue: 0.95) : Color(red: 0.94, green: 0.91, blue: 1)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: large ? 14 : 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(back ? "Rückseite" : "Vorderseite").fontWeight(.bold)
-                Spacer()
-                Text(back ? "Antwort" : "Frage")
-            }
-            .font(.system(size: large ? 12 : 10, weight: .medium, design: .monospaced))
-            .foregroundStyle(accent)
-
-            Rectangle().fill(accent.opacity(0.30)).frame(height: 1)
+        VStack(alignment: .leading, spacing: large ? 16 : 11) {
+            Label(back ? "Antwort" : "Frage", systemImage: back ? "checkmark.circle.fill" : "questionmark.circle.fill")
+                .font(.system(size: large ? 14 : 11, weight: .bold))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .foregroundStyle(accent)
+                .background(accent.opacity(0.09), in: Capsule())
 
             Text(text)
-                .font(.system(size: large ? (back ? 23 : 28) : (back && text.count > 110 ? 14 : 16),
-                              weight: back && text.count > 110 ? .regular : .semibold))
+                .font(.system(size: large ? (back ? 24 : 30) : (back && text.count > 110 ? 15 : 19),
+                              weight: back && text.count > 110 ? .regular : .semibold,
+                              design: back ? .default : .rounded))
                 .foregroundStyle(ink)
+                .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let artwork, artwork != .concept {
-                CardIllustration(artwork: artwork)
-                    .frame(maxWidth: 330)
-                    .frame(height: large ? 70 : 52)
-                    .frame(maxWidth: .infinity)
-                    .foregroundStyle(accent)
-                    .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
-                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    if let caption = artwork.caption {
+                        Text(caption).font(.system(size: 10, weight: .semibold)).foregroundStyle(accent)
+                    }
+                    CardIllustration(artwork: artwork)
+                        .frame(maxWidth: 350)
+                        .frame(height: large ? 92 : 63)
+                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(accent)
+                        .accessibilityHidden(true)
+                }
+                .padding(10)
+                .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 11))
             }
 
             if back, let explanation {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Einfach erklärt")
-                        .font(.system(size: large ? 12 : 10, weight: .bold))
+                VStack(alignment: .leading, spacing: 5) {
+                    Label("Einfach erklärt", systemImage: "lightbulb")
+                        .font(.system(size: large ? 13 : 11, weight: .bold))
                         .foregroundStyle(accent)
                     Text(explanation)
                         .font(.system(size: large ? 15 : 13))
@@ -88,29 +103,23 @@ struct PaperCardFace: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
-            }
-
-            if !back {
-                Spacer(minLength: 9)
-                Canvas { context, size in
-                    for fraction in [0.18, 0.52, 0.86] {
-                        let y = size.height * fraction
-                        var line = Path()
-                        line.addLines([CGPoint(x: 0, y: y), CGPoint(x: size.width, y: y)])
-                        context.stroke(line, with: .color(accent.opacity(0.14)), lineWidth: 1)
-                    }
-                }
-                .frame(height: large ? 55 : 31)
-                .accessibilityHidden(true)
+                .padding(11)
+                .background(accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
             }
         }
-        .padding(large ? 24 : 14)
+        .padding(large ? 25 : 16)
         .frame(maxWidth: .infinity, minHeight: large ? 304 : 198, maxHeight: .infinity, alignment: .topLeading)
-        .background(Self.paperColor(back: back), in: RoundedRectangle(cornerRadius: 14))
-        .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(accent.opacity(0.24)) }
-        .shadow(color: .black.opacity(0.16), radius: 3, y: 2)
+        .background {
+            RoundedRectangle(cornerRadius: 17)
+                .fill(LinearGradient(colors: [.white, Self.paperColor(back: back)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(accent.opacity(0.55)).frame(width: 3)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 17))
+        }
+        .overlay { RoundedRectangle(cornerRadius: 17).strokeBorder(accent.opacity(0.18)) }
+        .shadow(color: .black.opacity(0.22), radius: 6, y: 3)
         .accessibilityElement(children: .combine)
     }
 }
@@ -132,8 +141,10 @@ struct CompactLearningCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if artwork != .concept {
                     CardIllustration(artwork: artwork)
-                        .frame(width: 48, height: 35)
+                        .frame(width: 59, height: 39)
                         .foregroundStyle(accent)
+                        .padding(3)
+                        .background(accent.opacity(0.075), in: RoundedRectangle(cornerRadius: 7))
                         .accessibilityHidden(true)
                 }
             }

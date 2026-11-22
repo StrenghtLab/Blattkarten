@@ -22,7 +22,7 @@ Mit den Xcode Command Line Tools erstellt `./build.sh` die App und `./make-dmg.s
 
 Suche im geöffneten Fach oder Ordner nach Fragen, Antworten oder Dateinamen. Unter **Üben** kannst du fällige Karten, die Suchtreffer oder alle Karten auswählen. Gewusste Karten werden mit wachsenden Abständen wieder fällig. Schwierige Karten kommen früher zurück. Beim erneuten Import werden identische Karten am selben Ablageort übersprungen.
 
-**Datei mit KI** lässt ein eingerichtetes Modell den erkannten Text für die Kartenerstellung auswerten. Bei OpenAI sendet die App den erkannten Text nur nach einer Bestätigung. **Datei öffnen** verwendet die lokale Kartenerstellung.
+**KI-Generator** nimmt eingefügten Text, Fotos und PDFs an. Prüfe den erkannten Text und wähle ein Kartenlimit. In der Vorschau kannst du Belegstellen aufklappen und Karten abwählen. Erst beim Speichern werden sie dem geöffneten Fach oder Ordner hinzugefügt. Bei OpenAI sendet die App den erkannten Text nur nach einer Bestätigung. **Datei öffnen**, der Kamerascan und der Schnellmodus im KI-Studio erstellen Karten anhand lokaler Textregeln. Im Studio lässt sich bei Bedarf die KI-Generierung auswählen. Die Kartenansicht zeigt vorhandene Belegstellen zum Aufklappen.
 
 ### Antworten direkt in Blattkarten
 
