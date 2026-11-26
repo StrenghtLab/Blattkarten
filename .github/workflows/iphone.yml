@@ -11,11 +11,11 @@ on:
       - .github/workflows/iphone.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   ipa:
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -27,3 +27,16 @@ jobs:
           name: Blattkarten-iPhone
           path: ${{ runner.temp }}/Blattkarten-iPhone.ipa
           if-no-files-found: error
+
+      - name: Publish AltStore Classic preview
+        if: github.ref_name == 'iphone-build'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view iphone-v1.0 >/dev/null 2>&1; then
+            gh release upload iphone-v1.0 "$RUNNER_TEMP/Blattkarten-iPhone.ipa"
+          else
+            gh release create iphone-v1.0 "$RUNNER_TEMP/Blattkarten-iPhone.ipa" \
+              --target "$GITHUB_SHA" --title "Blattkarten für iPhone 1.0" --prerelease \
+              --notes "iPhone-Testversion ab iOS 16. Die IPA ist für den Import in AltStore Classic vorgesehen."
+          fi

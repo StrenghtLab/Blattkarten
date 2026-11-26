@@ -12,7 +12,7 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 mkdir "$stage/Payload"
 xcrun xcodebuild -project Blattkarten.xcodeproj -target Blattkarten -configuration Release -sdk iphoneos \
-    "CONFIGURATION_BUILD_DIR=$stage/build" CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO build
+    "CONFIGURATION_BUILD_DIR=$stage/build" CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO SWIFT_OPTIMIZATION_LEVEL=-Onone build
 ditto "$stage/build/Blattkarten.app" "$stage/Payload/Blattkarten.app"
 (cd "$stage" && zip -qry Blattkarten.ipa Payload)
 mv "$stage/Blattkarten.ipa" "$destination"
