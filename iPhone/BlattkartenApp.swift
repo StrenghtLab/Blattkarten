@@ -6,7 +6,7 @@ import ImageIO
 
 private let mint = Color(red: 0.73, green: 0.98, blue: 0.86)
 private let violet = Color(red: 0.79, green: 0.73, blue: 1)
-private let background = Color(red: 0.075, green: 0.065, blue: 0.13)
+private let studioBackground = Color(red: 0.075, green: 0.065, blue: 0.13)
 
 @main struct BlattkartenApp: App {
     var body: some Scene {
@@ -78,7 +78,7 @@ private struct LibraryView: View {
                     }
                 }.padding(20)
             }
-            .background(background.ignoresSafeArea())
+            .background(studioBackground.ignoresSafeArea())
             .navigationTitle("Blattkarten")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -245,22 +245,7 @@ private struct StudyView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let typing, cards.indices.contains(index) {
-                        let card = cards[index]
-                        ProgressView(value: Double(index), total: Double(cards.count))
-                        Text("Karte \(index + 1) von \(cards.count)").font(.caption)
-                        Text(card.question).font(.title2.bold()).padding(.vertical, 12)
-                        if !revealed {
-                            if typing { TextField("Deine Antwort", text: $answer, axis: .vertical).textFieldStyle(.roundedBorder) }
-                            Button("Musterantwort anzeigen") { revealed = true }
-                                .buttonStyle(.borderedProminent).tint(mint).foregroundStyle(.black)
-                        } else {
-                            if typing && !answer.isEmpty { Text("Deine Antwort: \(answer)").foregroundStyle(.secondary) }
-                            Text(card.answer).font(.title3).foregroundStyle(mint)
-                            HStack {
-                                Button("Nochmal") { advance(card, false) }.buttonStyle(.bordered)
-                                Button("Gewusst") { advance(card, true) }.buttonStyle(.borderedProminent)
-                            }
-                        }
+                        studyCard(cards[index], typing: typing)
                     } else if index == cards.count {
                         Label("Runde abgeschlossen", systemImage: "checkmark.circle.fill").font(.title2.bold())
                         Button("Fertig") { dismiss() }.buttonStyle(.borderedProminent)
@@ -271,9 +256,32 @@ private struct StudyView: View {
                     }
                 }.padding(22).frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(background.ignoresSafeArea())
+            .background(studioBackground.ignoresSafeArea())
             .navigationTitle("Üben").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Schließen") { dismiss() } } }
+        }
+    }
+
+    @ViewBuilder
+    private func studyCard(_ card: Card, typing: Bool) -> some View {
+        ProgressView(value: Double(index), total: Double(cards.count))
+        Text("Karte \(index + 1) von \(cards.count)").font(.caption)
+        Text(card.question).font(.title2.bold()).padding(.vertical, 12)
+        if !revealed {
+            if typing {
+                TextField("Deine Antwort", text: $answer, axis: .vertical).textFieldStyle(.roundedBorder)
+            }
+            Button("Musterantwort anzeigen") { revealed = true }
+                .buttonStyle(.borderedProminent).tint(mint).foregroundStyle(.black)
+        } else {
+            if typing && !answer.isEmpty {
+                Text("Deine Antwort: \(answer)").foregroundStyle(.secondary)
+            }
+            Text(card.answer).font(.title3).foregroundStyle(mint)
+            HStack {
+                Button("Nochmal") { advance(card, false) }.buttonStyle(.bordered)
+                Button("Gewusst") { advance(card, true) }.buttonStyle(.borderedProminent)
+            }
         }
     }
 
