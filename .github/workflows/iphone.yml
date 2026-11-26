@@ -1,0 +1,29 @@
+name: iPhone IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [iphone-build]
+    paths:
+      - iPhone/**
+      - Worksheet.swift
+      - LearningProgress.swift
+      - .github/workflows/iphone.yml
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build iPhone IPA
+        run: ./iPhone/build-ipa.sh "$RUNNER_TEMP/Blattkarten-iPhone.ipa"
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blattkarten-iPhone
+          path: ${{ runner.temp }}/Blattkarten-iPhone.ipa
+          if-no-files-found: error
