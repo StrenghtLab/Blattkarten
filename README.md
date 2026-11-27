@@ -7,6 +7,8 @@
   <img src="./docs/images/karteikarten.png" width="560" alt="Blattkarten mit Frage und Antwort nebeneinander. Auf den Rückseiten stehen beschriftete Skizzen einer Zelle, einer Parabel und eines Wassermoleküls.">
 </div>
 
+[Blockstadt-Produktvideo für Mac ansehen oder herunterladen](./docs/video/Blattkarten-Mac-Blockstadt.mp4)
+
 ## Was Blattkarten kann
 
 | Erstellen | Organisieren | Lernen |
