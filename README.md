@@ -7,6 +7,12 @@
   <img src="./docs/images/karteikarten.png" width="560" alt="Blattkarten mit Frage und Antwort nebeneinander. Auf den Rückseiten stehen beschriftete Skizzen einer Zelle, einer Parabel und eines Wassermoleküls.">
 </div>
 
+## Android
+
+[Blattkarten 1.4 als APK herunterladen](https://github.com/StrenghtLab/Blattkarten/raw/refs/heads/main/downloads/Blattkarten-Android-1.4.apk) · Android 7.0 oder neuer
+
+Der [Android-Quellcode](./Android) lässt sich als Gradle-Projekt in Android Studio öffnen.
+
 ## Was Blattkarten kann
 
 | Erstellen | Organisieren | Lernen |

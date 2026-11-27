@@ -1,0 +1,10 @@
+<resources>
+    <style name="BlattkartenTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">#151323</item>
+        <item name="android:colorAccent">#CBB9FF</item>
+        <item name="android:navigationBarColor">#151323</item>
+        <item name="android:statusBarColor">#151323</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

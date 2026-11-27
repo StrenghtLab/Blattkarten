@@ -1,0 +1,4 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="140dp" android:minHeight="66dp" android:targetCellWidth="2"
+    android:targetCellHeight="1" android:initialLayout="@layout/flame_widget"
+    android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen" />
